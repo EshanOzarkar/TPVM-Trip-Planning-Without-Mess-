@@ -168,3 +168,19 @@ const REGIONS = {
 const SAMPLE_TRIPS = [
   ['Delhi', 'Jaipur'], ['Mumbai', 'Goa'], ['Bengaluru', 'Munnar'], ['Delhi', 'Manali'], ['London', 'Paris'],
 ];
+
+/* Things people look for on a trip. `nom` is the phrase Nominatim understands, `ql` the matching
+   Overpass filter (used for along-the-route search), `terms` are everyday words that map to it. */
+const SEARCH_TOPICS = [
+  { id: 'fuel', label: 'Petrol pump', ic: 'fuel', nom: 'petrol station', ql: '["amenity"="fuel"]', terms: ['petrol', 'petrol pump', 'petrol station', 'pump', 'gas', 'gas station', 'fuel', 'diesel', 'cng'] },
+  { id: 'food', label: 'Food', ic: 'utensils', nom: 'restaurant', ql: '["amenity"~"^(restaurant|fast_food|food_court)$"]', terms: ['food', 'restaurant', 'dhaba', 'eat', 'meal', 'lunch', 'dinner', 'breakfast', 'street food', 'thali'] },
+  { id: 'cafe', label: 'Cafe', ic: 'coffee', nom: 'cafe', ql: '["amenity"="cafe"]', terms: ['cafe', 'coffee', 'tea', 'chai'] },
+  { id: 'atm', label: 'ATM', ic: 'banknote', nom: 'atm', ql: '["amenity"~"^(atm|bank)$"]', terms: ['atm', 'cash', 'bank', 'money'] },
+  { id: 'medical', label: 'Hospital', ic: 'cross', nom: 'hospital', ql: '["amenity"~"^(hospital|clinic)$"]', terms: ['hospital', 'doctor', 'clinic', 'emergency', 'medical'] },
+  { id: 'pharmacy', label: 'Pharmacy', ic: 'pill', nom: 'pharmacy', ql: '["amenity"="pharmacy"]', terms: ['pharmacy', 'chemist', 'medical store', 'medicine', 'drugstore'] },
+  { id: 'hotel', label: 'Hotel', ic: 'bed', nom: 'hotel', ql: '["tourism"~"^(hotel|motel|guest_house|hostel)$"]', terms: ['hotel', 'stay', 'lodge', 'room', 'motel', 'night'] },
+  { id: 'ev', label: 'EV charging', ic: 'zap', nom: 'charging station', ql: '["amenity"="charging_station"]', terms: ['ev', 'charging', 'charger', 'ev charging', 'electric'] },
+  { id: 'toilet', label: 'Toilets', ic: 'toilet', nom: 'toilets', ql: '["amenity"="toilets"]', terms: ['toilet', 'toilets', 'restroom', 'washroom', 'loo'] },
+  { id: 'repair', label: 'Car repair', ic: 'wrench', nom: 'car repair', ql: '["shop"="car_repair"]', terms: ['mechanic', 'garage', 'repair', 'puncture', 'car repair', 'tyre'] },
+  { id: 'sight', label: 'Sights', ic: 'camera', nom: 'tourist attraction', ql: '["tourism"~"^(attraction|viewpoint|museum)$"]', terms: ['sights', 'sight', 'attraction', 'attractions', 'viewpoint', 'museum', 'things to see'] },
+];

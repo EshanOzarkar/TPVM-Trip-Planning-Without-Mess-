@@ -57,8 +57,8 @@ const API = (() => {
 
   /* ---------- Overpass (serialised: public servers allow ~2 slots) ---------- */
   const OVERPASS = [
-    ['https://overpass-api.de/api/interpreter', 22000],
-    ['https://overpass.kumi.systems/api/interpreter', 15000],
+    ['https://overpass-api.de/api/interpreter', 14000],
+    ['https://overpass.kumi.systems/api/interpreter', 9000],
   ];
   let chain = Promise.resolve();
 
@@ -132,12 +132,31 @@ const API = (() => {
     `[out:json][timeout:30];(nwr["railway"="station"]["station"!~"^(subway|light_rail)$"]["name"](around:${r},${lat},${lon});nwr["amenity"="bus_station"]["name"](around:${r},${lat},${lon}););out center tags qt 60;`);
 
   /* ---------- Live search ---------- */
+  /** Everything Overpass finds within `radius` metres of a route (a list of [lat, lon] points). */
+  const alongOverpass = (filter, pts, radius) => overpass(
+    `[out:json][timeout:40];nwr${filter}(around:${radius},${pts.map(p => p[0].toFixed(4) + ',' + p[1].toFixed(4)).join(',')});out center tags qt 400;`);
+
+  /** Nominatim search for `term` inside a square of half-width `km` around a point (backup for along-route search). */
+  async function nominatimBox(term, lat, lon, km) {
+    const key = `nb:${term}:${lat.toFixed(2)},${lon.toFixed(2)},${km}`;
+    let rows = cache.get(key) || lsGet(key);
+    if (!rows) {
+      const dLat = km / 111, dLon = km / (111 * Math.cos(lat * Math.PI / 180));
+      await nomGate();
+      rows = await fetchJSON(`https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&bounded=1&limit=30&accept-language=en&viewbox=${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}&q=${encodeURIComponent(term)}`);
+      lsSet(key, rows);
+    }
+    cache.set(key, rows);
+    return rows.filter(x => x.name && NOM_CATS.has(x.category))
+      .map(x => ({ type: x.osm_type, id: x.osm_id, lat: +x.lat, lon: +x.lon, tags: { ...(x.extratags || {}), name: x.name, [x.category]: x.type } }));
+  }
+
   /** Nominatim free-text search biased to a box around (lat, lon); widens if few local hits. */
   async function searchPlaces(term, lat, lon, km = 40) {
     const key = `s:${term.toLowerCase()}:${lat.toFixed(2)},${lon.toFixed(2)}`;
     if (cache.has(key)) return cache.get(key);
     const dLat = km / 111, dLon = km / (111 * Math.cos(lat * Math.PI / 180));
-    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&addressdetails=1&limit=15&accept-language=en&viewbox=${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}&q=${encodeURIComponent(term)}`;
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&addressdetails=1&limit=30&accept-language=en&viewbox=${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}&q=${encodeURIComponent(term)}`;
     await nomGate();
     let rows = await fetchJSON(url + '&bounded=1');
     let wide = false;
@@ -225,5 +244,5 @@ const API = (() => {
     }));
   }
 
-  return { geocode, places, nominatimPlaces, searchPlaces, wikiSearch, airports, stations, osrmTable, osrmRoute, guide, weather };
+  return { geocode, places, nominatimPlaces, searchPlaces, alongOverpass, nominatimBox, wikiSearch, airports, stations, osrmTable, osrmRoute, guide, weather };
 })();
