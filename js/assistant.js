@@ -31,7 +31,7 @@ const NOT_PLACES = new Set(['food', 'street food', 'local food', 'shopping', 'si
 const clean = s => String(s || '').replace(/\s+/g, ' ').replace(/^[\s,.;:–—-]+|[\s,.;:–—-]+$/g, '').trim();
 const cityLike = s => { s = clean(s); const w = s.split(' '); return !!s && w.length <= 3 && !/\d/.test(s) && !STOPWORDS.has(w[0].toLowerCase()) && s.length > 1; };
 const tidyCity = s => clean(s).replace(/\b(city|trip|tour|holiday|vacation|visit|please)\b$/i, '').replace(/^(the)\s+/i, '').trim();
-const END = '(?=\\s+(?:for|on|with|in|by|via|from|visit|see|seeing|staying|budget|luxury|cheap|premium|comfort|that|where|and\\s+(?:see|visit|cover)|\\d)|[,.;!?\\n]|$)';
+const END = '(?=\\s+(?:(?:for|on|with|in|by|via|from|visit|see|seeing|staying|budget|luxury|cheap|premium|comfort|that|where|tell|what|which|please|suggest|show|give|recommend|can|could|how|my|we|so|but|also|because|then|let|need|want|i|am|im|i\'m)\\b|and\\s+(?:see|visit|cover)|\\d)|[,.;!?\\n]|$)';
 
 function parseRoute(text) {
   let from = null, to = null, m;
@@ -72,7 +72,7 @@ function parseDate(text) {
 
 const splitList = s => String(s).split(/\s*(?:,|;|\band\b|&|\+|→|->|\n|•|\bthen\b)\s*/i)
   .map(x => clean(x).replace(/\s+(?:for|on|with|in|by|budget|luxury|cheap|from|to|and)\b.*$/i, '').replace(/^(?:the|a)\s+(?=[A-Z])/i, ''))
-  .filter(x => x.length > 2 && x.length < 60 && !NOT_PLACES.has(x.toLowerCase()) && !/^\d+$/.test(x));
+  .filter(x => x.length > 2 && x.length < 60 && !NOT_PLACES.has(x.toLowerCase()) && !/^\d+$/.test(x) && !/^(what|which|how|where|when|why|who|tell)\b/i.test(x));
 
 function parsePlaces(text) {
   const groups = [], found = [];
@@ -121,6 +121,7 @@ function parse(text) {
   const groupsClean = groups.map(g => ({ day: g.day, places: g.places.filter(n => !inRoute(n)) })).filter(g => g.places.length);
   let to = route.to;
   if (!to && !route.from && places.length === 1 && !groupsClean.length && text.trim().split(/\s+/).length <= 8) { to = places[0]; places = []; }
+  if (!to && route.from && places.length && !groupsClean.length) to = places.shift();   // "I'd like to visit Udaipur ... starting from Pune"
   return { ...route, to, ...nums, start: parseDate(text), places, groups: groupsClean };
 }
 
@@ -153,6 +154,8 @@ const topicOf = t => T.topicFor(t.replace(/\b(on the way|along the (?:route|way|
 
 /* ============================== chat UI ============================== */
 const ui = {};
+const blurbs = new Map();   // place key -> one-line description from the travel guide
+const GENERIC_SIGHT = /^(Heritage Houses?|Old City|Walled City|Attracted|Other|Museums?|Temples?|Markets?)$|^[A-Za-z]+(ed|ing|ly)$/i;
 let started = false, pending = null, lastPlan = null, busy = false, typedDest = '';   // typedDest: the destination as the user wrote it ("Ooty")
 
 function buildUI() {
@@ -353,6 +356,7 @@ const close = (a, b) => {   // equal, or one edit apart (for words of 4+ letters
   }
   return edits + (a.length - i) + (b.length - j) <= 1;
 };
+const spellVariant = n => n.replace(/\bAashram\b/gi, 'Ashram').replace(/\bMasjid\b/gi, 'Mosque').replace(/\bVav\b/gi, 'Stepwell');
 /** Find a named place near the destination. */
 async function resolveStop(name, near) {
   const { rows } = await API.searchPlaces(name, near.lat, near.lon, 40);
@@ -364,12 +368,52 @@ async function resolveStop(name, near) {
     const sc = want.reduce((t, w) => t + (have.some(h => close(w, h)) ? weight(w) : 0), 0) / total;
     if (sc > bestScore + 1e-9) { best = r; bestScore = sc; }
   }
-  if (!best || bestScore < 0.55) return null;
+  if (!best || bestScore < 0.5) return null;
   const p = T.searchRow(best);
   return p && hav(near, p) <= 150 ? p : null;
 }
 
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+
+/* ---------- the guide's own list of sights ---------- */
+const CONNECT = new Set(['of', 'ni', 'ki', 'ka', 'ke', 'de', 'e', 'al', 'ul', 'bin', 'la', 'le', 'du']);
+const SKIP_START = /^(Important|There|Modern|Some|This|These|It|Other|Also|Many|Most|Several|See|For|If|In|At|On|You|Visit|Check|Try|Note|Entry|Tickets?|Open|Timings|Opening|Here|Another|One|Two|Three|Few|Not|Do|Be|Make|Take|Best|Good|Great|All|Along|Around|Near|Beyond|Apart|Besides|Located|Built|Famous|Popular|Known|Today|Although|While|When|Whilst|Both|Each|Every|Almost|Just|Only|Unlike|Like|Within|Outside|Inside|Nearby|Adjacent)\b/;
+/** The capitalised name phrase at the start of `line`, and how many words it used. */
+function capPhrase(line) {
+  const toks = line.split(/\s+/), name = [];
+  let used = 0;
+  for (const t of toks) {
+    const bare = t.replace(/[,;:.)]+$/, ''), stop = /[,;:.]$/.test(t);
+    if (/^[A-Z][\w'’-]*$/.test(bare) || (CONNECT.has(bare.toLowerCase()) && name.length)) { name.push(bare); used++; if (stop) break; } else break;
+  }
+  while (name.length && CONNECT.has(name[name.length - 1].toLowerCase())) name.pop();
+  return { name: name.join(' '), words: name.length, used, rest: toks.slice(used).join(' ') };
+}
+const tidyBlurb = t => { t = t.length > 190 ? t.slice(0, 187).replace(/\s\S*$/, '') + '…' : t; return t.replace(/^./, c => c.toUpperCase()); };
+/** Named sights from a Wikivoyage "See" section: works for numbered lists (Jaipur) and for prose (Ahmedabad). */
+function guideSights(g, city) {
+  const text = String(g?.sections?.see || '').replace(/^=+.*=+$/gm, '');
+  const cityLow = String(city || '').toLowerCase(), out = [], seen = new Set();
+  for (const raw of text.split('\n')) {
+    const numbered = /^\s*\d{1,2}\s+/.test(raw);
+    const line = raw.replace(/^\s*(?:\d{1,2}\s+|[-*•]\s*)/, '').replace(/^(?:The|A|An)\s+/, '').trim();
+    if (!/^[A-Z]/.test(line) || SKIP_START.test(line)) continue;
+    const { name: nm, words, rest } = capPhrase(line);
+    if (words < 1 || words > 6 || nm.length < 5 || /\d/.test(nm) || nm.toLowerCase() === cityLow || seen.has(nm.toLowerCase())) continue;
+    if (words === 1 && nm.length < 7) continue;
+    seen.add(nm.toLowerCase());
+    const alt = (/^(?:or|aka|also known as)\s+(?:the\s+)?(.+)$/i.exec(rest) || [])[1];
+    const altName = alt ? capPhrase(alt).name : '';
+    const cleaned = line.replace(/\([^)]*\)/g, ' ').replace(/☏[^.]*\./g, ' ').replace(/\S+@\S+/g, ' ').replace(/\s+/g, ' ').trim();
+    const afterName = cleaned.slice(cleaned.indexOf(nm) + nm.length).replace(/^[\s,.;:–—-]+/, '');
+    // prose lines read well as the whole first sentence; numbered listings keep just the description after the name
+    const sentence = numbered
+      ? (afterName.split(/(?<=[.!?])\s+/).find(x => x.length > 25) || afterName)
+      : (cleaned.split(/(?<=[.!?])\s+/)[0] || cleaned);
+    out.push({ name: nm, alts: altName && altName.toLowerCase() !== nm.toLowerCase() ? [altName] : [], blurb: tidyBlurb(sentence.trim()) });
+  }
+  return out;
+}
 
 /** Split a nearest-neighbour chain of places into day groups: places a few km apart share a day. */
 function clusterChain(chain, days) {
@@ -379,6 +423,11 @@ function clusterChain(chain, days) {
     let bi = 0, bd = Infinity;
     for (let i = 0; i < segs.length - 1; i++) { const g = hav(segs[i][segs[i].length - 1], segs[i + 1][0]); if (g < bd) { bd = g; bi = i; } }
     segs.splice(bi, 2, segs[bi].concat(segs[bi + 1]));
+  }
+  // enough stops for every day but they all sit close together: deal the (already nearest-first) chain out evenly
+  if (segs.length < days && chain.length >= days * 2) {
+    const per = Math.ceil(chain.length / days);
+    return Array.from({ length: days }, (_, i) => chain.slice(i * per, (i + 1) * per)).filter(g2 => g2.length);
   }
   return segs;
 }
@@ -430,13 +479,32 @@ async function executePlan(it, bot) {
   }
 
   let suggested = false;
+  blurbs.clear();
   if (!wanted.length) {
-    working(bot, `Finding the main sights in ${esc(to.city || to.name)}…`);
-    await waitFor(() => !S.loading.see && S.places.see, 50000);
-    const list = (S.places.see || []).filter(p => p.dist <= 15)
-      .sort((a, b) => (b.notable - a.notable) || (a.dist - b.dist)).slice(0, Math.min(9, (nights + 1) * 3));
-    list.forEach(p => found.push({ p, day: null }));
-    suggested = list.length > 0;
+    const target = Math.min(9, (nights + 1) * 3);
+    // 1) the travel guide's own list of sights (curated, most important first)
+    working(bot, `Reading the ${esc(to.city || to.name)} travel guide for the main sights…`);
+    await waitFor(() => S.guide !== null, 15000);
+    const sights = S.guide ? guideSights(S.guide, to.city || to.name).filter(x => !GENERIC_SIGHT.test(x.name)).slice(0, target + 5) : [];
+    const t0 = Date.now();
+    for (let i = 0; i < sights.length && found.length < target && Date.now() - t0 < 28000; i++) {
+      working(bot, `Locating ${esc(sights[i].name)} (${found.length} of ${target} found)…`);
+      let p = null;
+      const tries = [...new Set([sights[i].name, ...sights[i].alts, spellVariant(sights[i].name), ...sights[i].alts.map(spellVariant)])].slice(0, 3);
+      for (const t of tries) { try { p = await resolveStop(t, to); } catch { /* try the next spelling */ } if (p) break; }
+      if (p && !found.some(f => hav(f.p, p) < 0.3)) { found.push({ p, day: null }); if (sights[i].blurb) blurbs.set(p.key, sights[i].blurb); }
+    }
+    // 2) top up with the nearest notable places from the map data if the guide gave too few
+    if (found.length < Math.min(target, (nights + 1) * 2)) {
+      working(bot, `Finding more sights in ${esc(to.city || to.name)}…`);
+      await waitFor(() => !S.loading.see && S.places.see, 50000);
+      const pool = (S.places.see || []).filter(p => p.dist <= 15).sort((a, b) => (b.notable - a.notable) || (a.dist - b.dist));
+      for (const p of pool) {
+        if (found.length >= target) break;
+        if (!found.some(f => hav(f.p, p) < 0.3)) found.push({ p, day: null });   // checked one by one, so duplicates in the map data are skipped too
+      }
+    }
+    suggested = found.length > 0;
   }
 
   // spread the stops over the days
@@ -480,13 +548,14 @@ function planCard({ from, to, days, missing, suggested, nights }) {
   if (modes.length) {
     h += `<h5>${ico('plane', 'xs')} Getting there</h5><ul class="cb-list">${modes.map(m => `<li><b>${m.name}</b> · ${fmtMin(m.time)}<br><span class="cb-mut">${m.per}</span>${m.cheapest ? ' <i class="cb-tag">cheapest</i>' : ''}${m.fastest ? ' <i class="cb-tag">fastest</i>' : ''}</li>`).join('')}</ul>`;
   }
-  h += `<h5>${ico('calendar', 'xs')} Your itinerary${suggested ? ' <span class="cb-mut">(suggested sights)</span>' : ''}</h5>`;
+  h += `<h5>${ico('calendar', 'xs')} ${suggested ? `What to do in ${esc(toN)}` : 'Your itinerary'}</h5>${suggested ? `<p class="cb-hint" style="margin:0 0 6px">Main sights from the Wikivoyage travel guide, grouped by distance so each day stays compact. Say “add …” to include something else.</p>` : ''}`;
   for (let d = 1; d <= days; d++) {
     const items = S.plan.items.filter(i => i.day === d), r = S.routes[d];
     if (!items.length) { h += `<div class="cb-day"><b>Day ${d}</b> <span class="cb-mut">${esc(T.dayLabel(d))} · open day. </span><button type="button" class="cb-link" data-cb="q" data-q="Suggest sights to fill the open days">Fill it with nearby sights</button></div>`; continue; }
     h += `<div class="cb-day"><b>Day ${d}</b> <span class="cb-mut">${esc(T.dayLabel(d))}${r && !r.pending ? ` · ${fmtKm(r.dist)} · ${fmtMin(r.dur)} driving` : ''}</span><ol>${items.map((it2, i) => {
       const leg = r?.legs?.[i];
-      return `<li>${esc(it2.place.name)}${leg ? ` <span class="cb-mut">${i === 0 ? '' : '+'}${fmtKm(leg.dist)} · ${fmtMin(leg.dur)}${i === 0 ? ' from your base' : ''}</span>` : ''}</li>`;
+      const bl = blurbs.get(it2.key);
+      return `<li>${esc(it2.place.name)}${leg ? ` <span class="cb-mut">${i === 0 ? '' : '+'}${fmtKm(leg.dist)} · ${fmtMin(leg.dur)}${i === 0 ? ' from your base' : ''}</span>` : ''}${bl ? `<div class="cb-blurb">${esc(bl)}</div>` : ''}</li>`;
     }).join('')}</ol></div>`;
   }
   if (missing.length) h += `<p class="cb-warn">Couldn't find: ${missing.map(esc).join(', ')}. Try the exact name, or search for it in the box above the tabs.</p>`;
@@ -783,5 +852,5 @@ async function aiSummarise(question, sentences) {
 /* ============================== boot ============================== */
 buildUI();
 setMode();
-window.TPVMAssistant = { parse, classify, ALIAS };
+window.TPVMAssistant = { parse, classify, ALIAS, guideSights };
 })();
