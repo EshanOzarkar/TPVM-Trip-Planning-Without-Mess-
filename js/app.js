@@ -96,6 +96,8 @@ const IC = {
   zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  chat: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
   toilet: '<circle cx="12" cy="5" r="2"/><path d="M9 22v-7H7l2-7h6l2 7h-2v7M12 22v-7"/>',
 };
 const ico = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
@@ -1057,7 +1059,8 @@ function guessCat(x) {
 
 function searchRow(x) {
   const cat = guessCat(x);
-  const tags = { ...(x.extratags || {}), name: x.name || x.display_name.split(',')[0] };
+  // a place with no name in OpenStreetMap would otherwise show the street it is on as if that were its name
+  const tags = { ...(x.extratags || {}), name: x.name || `${pretty(x.type)} near ${x.display_name.split(',')[0]}` };
   tags[x.category] = x.type;
   const p = normalize(cat, { type: x.osm_type, id: x.osm_id, lat: +x.lat, lon: +x.lon, tags });
   if (!p) return null;
@@ -1411,21 +1414,22 @@ const ACT = {
     S.plan.items.forEach(i => { if (i.day === last) i.day = last - 1; });
     S.plan.days--; S.plan.active = Math.min(S.plan.active, S.plan.days); delete S.routes[last]; replan();
   },
-  'plan-opt': el => {
-    const d = +el.dataset.day, items = S.plan.items.filter(i => i.day === d), ordered = [];
-    let cur = S.base; const left = items.slice();
-    while (left.length) {
-      let bi = 0, bd = Infinity;
-      left.forEach((it, i) => { const k = hav(cur, it.place); if (k < bd) { bd = k; bi = i; } });
-      const [n] = left.splice(bi, 1); ordered.push(n); cur = n.place;
-    }
-    S.plan.items = S.plan.items.filter(i => i.day !== d).concat(ordered);
-    replan(); toast('Stops re-ordered by nearest-next');
-  },
+  'plan-opt': el => { optimiseDay(+el.dataset.day); replan(); toast('Stops re-ordered by nearest-next'); },
   'plan-copy': async () => { try { await navigator.clipboard.writeText(planText()); toast('Itinerary copied'); } catch { toast('Copy blocked by the browser'); } },
   'plan-print': () => window.print(),
   'plan-clear': () => { if (confirm('Remove all stops from every day?')) { S.plan.items = []; S.routes = {}; replan(); } },
 };
+
+function optimiseDay(d) {
+  const items = S.plan.items.filter(i => i.day === d), ordered = [];
+  let cur = S.base; const left = items.slice();
+  while (left.length) {
+    let bi = 0, bd = Infinity;
+    left.forEach((it, i) => { const k = hav(cur, it.place); if (k < bd) { bd = k; bi = i; } });
+    const [n] = left.splice(bi, 1); ordered.push(n); cur = n.place;
+  }
+  S.plan.items = S.plan.items.filter(i => i.day !== d).concat(ordered);
+}
 
 function movePlan(key, dir) {
   const it = S.plan.items.find(i => i.key === key); if (!it) return;
@@ -1527,6 +1531,29 @@ function syncForm() {
   save(); renderContent(); renderListsIfVisible();
 }
 
+/* ============================== hooks for the assistant (js/assistant.js) ============================== */
+/** Start a trip from already-resolved places (what the form's "Plan trip" does). */
+function beginTrip({ from, to, start, end, travelers, tier }) {
+  $('#fromInput').value = from.label; $('#fromInput')._place = from;
+  $('#toInput').value = to.label; $('#toInput')._place = to;
+  if (start) $('#startDate').value = start;
+  if (end) $('#endDate').value = end;
+  if (travelers) $('#travelers').value = travelers;
+  if (tier) $('#tier').value = String(tier);
+  S.trip = { from, to, ...formValues() };
+  activateTrip(false);
+}
+function planAddPlace(p, day) {
+  if (S.plan.items.some(i => i.key === p.key)) return false;
+  S.plan.items.push({ key: p.key, day, place: { key: p.key, cat: p.cat, name: p.name, lat: p.lat, lon: p.lon, sub: p.sub, tags: { website: p.tags?.website, phone: p.tags?.phone }, dist: p.dist, dur: p.dur, approx: p.approx } });
+  return true;
+}
+window.TPVM = {
+  S, ico, esc, q, fmtKm, fmtMin, money, range, hav, nights, dayLabel, toast, DISCLAIMER,
+  beginTrip, planAddPlace, optimiseDay, setTab, replan, calcBudget, calcModes, searchRow, topicFor, runAlong, fitPts, focusPlace, planText, closePopup,
+  searchUI: term => { $('#gsearch').value = term; onGSearch(term, true); },
+};
+
 /* ============================== init ============================== */
 function init() {
   initMap(); renderTabs(); renderLayerBar();
@@ -1545,6 +1572,10 @@ function init() {
   try { saved = JSON.parse(localStorage.getItem('tpvm.v1') || localStorage.getItem('wayfarer.v1') || 'null'); } catch { /* ignore */ }
   if (saved?.trip?.to && saved.trip.from) {
     S.trip = saved.trip; S.plan = saved.plan || S.plan; S.base = saved.base; S.tab = saved.tab && saved.tab !== 'search' ? saved.tab : 'overview';
+    if (!S.trip.start || S.trip.start < iso(new Date())) {   // an old saved trip: move it to the near future, keeping its length
+      const n = nights(), d = new Date(); d.setDate(d.getDate() + 14);
+      S.trip.start = iso(d); d.setDate(d.getDate() + n); S.trip.end = iso(d);
+    }
     $('#fromInput').value = S.trip.from.label; $('#toInput').value = S.trip.to.label;
     $('#fromInput')._place = S.trip.from; $('#toInput')._place = S.trip.to;
     if (S.trip.start) $('#startDate').value = S.trip.start;

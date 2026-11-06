@@ -32,6 +32,22 @@ Every place type has its own icon and colour on the map and in the lists.
 
 The map is a vector map you can zoom, rotate and tilt. The **3D** button tilts it to show buildings, and **Detailed / Light / Bright** switches the map style. A small marker travels your route (a plane along the flight arc, a dot along the road).
 
+## Trip assistant (chat)
+
+The **Ask TPVM** button opens a chat in the left panel, with the map visible beside it. Tell it where you want to go, or paste your itinerary, and it finds the places, draws the route, works out distances and times, and adds up the cost with taxes.
+
+- **Plan:** "3 days in Jaipur from Delhi for 2, visit Amber Fort and Hawa Mahal". It understands Indian names and aliases (Bangalore, Bombay, Ooty…), dates ("12 Dec"), group size, budget or luxury, and pasted itineraries such as "Day 1: Charminar, Golconda Fort. Day 2: Ramoji Film City". Nearby stops share a day, and open days can be filled with nearby sights.
+- **Follow up:** "how much will it cost?", "petrol pumps on the way", "pharmacy near the hotel", "add Jantar Mantar to day 2", "optimise the order".
+- **Ask:** "how do I get around Ooty?" is answered by quoting the Wikivoyage guide. If the guide doesn't cover it, the assistant says so rather than guessing.
+
+**How it works, and what it is not.** There is no off-the-shelf open model specialised in Indian travel, and this project does not claim one. Instead:
+
+- *Instant mode (default):* a rules-based reader tuned for Indian trip phrasing. No download, works on any device.
+- *Optional on-device AI:* tick it in the chat's settings (the ⓘ button). A small open model (Qwen2.5, Apache-2.0) runs **in your browser** through [WebLLM](https://webllm.mlc.ai) (needs WebGPU: recent Chrome or Edge). Choose Light (0.5B, about 400 MB) or Better (1.5B, about 1 GB); it downloads once and is cached. Nothing you type leaves your device. It helps with messier wording and can rephrase a guide quote.
+- *Safeguards:* the AI is only used when the rules can't read a message, and nothing it extracts is used unless it actually appears in what you typed. It never supplies distances, times or costs. Those always come from the portal's own data (OpenStreetMap, road routing, the Indian tax and price model). Any AI rephrasing is rejected if it contains a number, month or name that isn't in the quoted guide text.
+- *Speed:* instant mode answers in seconds. The AI step took about 35 seconds on a laptop with integrated graphics.
+- *India-specific* comes from the data and rules (places, GST and fee model, local words like "dhaba" and "chemist"), not from a fine-tuned model. Fine-tuning a small model on Indian travel text would be a separate project.
+
 ### What is deliberately not included
 
 Features that free data can't support well were removed rather than faked. In a check on Jaipur, only 7% of restaurants carried a vegetarian tag, 1% of stays a star rating and only 3 rental shops were mapped. So there is no veg-only filter, no per-hotel price or star sort, no rental-shop list and no live fares or availability. Prices are category-level estimates and booking buttons open the provider's own site.
