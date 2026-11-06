@@ -32,12 +32,6 @@ const CATEGORIES = {
       { limit: 120, f: ['["shop"~"^(jewelry|clothes|fabric|boutique|antiques|art|books|variety_store)$"]["name"]'] },
     ],
   },
-  rent: {
-    label: 'Rentals', color: '#059669', radius: 15000,
-    groups: [{ limit: 80, f: [
-      '["amenity"~"^(car_rental|motorcycle_rental|bicycle_rental|boat_rental)$"]["name"]',
-      '["shop"="rental"]["name"]'] }],
-  },
   transit: {
     label: 'Stations', color: '#475569', radius: 25000,
     groups: [
@@ -55,12 +49,10 @@ const FALLBACK_TERMS = {
   stay: ['hotel', 'guest house', 'hostel', 'resort'],
   food: ['restaurant', 'cafe', 'fast food', 'sweet shop'],
   shop: ['shopping mall', 'market', 'handicraft', 'souvenir'],
-  rent: ['car rental', 'bike rental'],
   transit: ['railway station', 'bus station', 'airport'],
 };
 
-const LAYER_ORDER =['see', 'stay', 'food', 'shop', 'rent', 'transit'];
-const STAR_MULT = { 1: 0.5, 2: 0.7, 3: 1, 4: 1.9, 5: 3.4 };
+const LAYER_ORDER = ['see', 'stay', 'food', 'shop', 'transit'];
 const DAY_COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#4d7c0f', '#9333ea', '#0f766e'];
 
 /* Price models are rough planning estimates, not live fares. */

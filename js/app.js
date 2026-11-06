@@ -99,7 +99,7 @@ const IC = {
   toilet: '<circle cx="12" cy="5" r="2"/><path d="M9 22v-7H7l2-7h6l2 7h-2v7M12 22v-7"/>',
 };
 const ico = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
-const CAT_ICON = { see: 'pin', stay: 'bed', food: 'utensils', shop: 'bag', rent: 'key', transit: 'train' };
+const CAT_ICON = { see: 'pin', stay: 'bed', food: 'utensils', shop: 'bag', transit: 'train' };
 
 /* Every kind of place gets its own icon and colour (keyed by the OSM tag value). */
 const SUB_ICON = {
@@ -127,19 +127,26 @@ const placeIcon = p => {
 };
 
 /* ============================== state ============================== */
-const TABS = [
-  { id: 'overview', ico: 'compass', label: 'Overview' },
-  { id: 'search', ico: 'search', label: 'Search' },
-  { id: 'reach', ico: 'plane', label: 'Get there' },
-  { id: 'along', ico: 'route', label: 'On the way' },
-  { id: 'stay', ico: 'bed', label: 'Stay' },
-  { id: 'move', ico: 'car', label: 'Get around' },
-  { id: 'eat', ico: 'utensils', label: 'Eat' },
-  { id: 'shop', ico: 'bag', label: 'Shop' },
-  { id: 'see', ico: 'pin', label: 'Explore' },
-  { id: 'plan', ico: 'calendar', label: 'Itinerary' },
+const GROUPS = [
+  { id: 'overview', ico: 'compass', label: 'Trip', views: ['overview'] },
+  { id: 'travel', ico: 'plane', label: 'Travel', views: ['reach', 'along'] },
+  { id: 'stay', ico: 'bed', label: 'Stay', views: ['stay'] },
+  { id: 'explore', ico: 'pin', label: 'Explore', views: ['see', 'eat', 'shop', 'move'] },
+  { id: 'plan', ico: 'calendar', label: 'Itinerary', views: ['plan'] },
 ];
-const TAB_CATS = { stay: ['stay'], eat: ['food'], shop: ['shop'], see: ['see'], move: ['rent', 'transit'] };
+const VIEW_LABEL = { reach: ['plane', 'Options'], along: ['route', 'On the way'], see: ['pin', 'Sights'], eat: ['utensils', 'Food'], shop: ['bag', 'Shopping'], move: ['car', 'Local rides'] };
+const groupOf = tab => GROUPS.find(g => g.views.includes(tab));
+const lastLeaf = {};
+const resolveTab = id => {
+  const g = GROUPS.find(x => x.id === id);
+  return g ? (g.views.includes(lastLeaf[g.id]) ? lastLeaf[g.id] : g.views[0]) : id;
+};
+const segControl = () => {
+  const g = groupOf(S.tab);
+  if (!g || g.views.length < 2) return '';
+  return `<div class="seg">${g.views.map(v => `<button class="${S.tab === v ? 'on' : ''}" data-act="tab" data-tab="${v}">${ico(VIEW_LABEL[v][0], 'xs')}${VIEW_LABEL[v][1]}</button>`).join('')}</div>`;
+};
+const TAB_CATS = { stay: ['stay'], eat: ['food'], shop: ['shop'], see: ['see'], move: ['transit'] };
 const freshSearch = () => ({ q: '', seq: 0, loading: false, done: false, places: [], voy: [], wp: [], wide: false, errP: false, prev: 'overview' });
 const freshAlong = () => ({ topic: '', q: '', seq: 0, loading: false, progress: '', places: [], note: '', limit: 30, done: false });
 
@@ -149,7 +156,7 @@ const S = {
   layers: new Set(), plan: { days: 3, items: [], active: 1 }, routes: {},
   reach: null, guide: null, weather: null, token: 0, mode: null, search: freshSearch(), along: freshAlong(),
 };
-const filt = cat => S.filters[cat] || (S.filters[cat] = { chip: '', q: '', sort: cat === 'see' ? 'notable' : 'dist', veg: false });
+const filt = cat => S.filters[cat] || (S.filters[cat] = { chip: '', q: '', sort: cat === 'see' ? 'notable' : 'dist' });
 
 const money = n => {
   const v = n >= 1000 ? Math.round(n / 50) * 50 : n >= 100 ? Math.round(n / 5) * 5 : Math.round(n);
@@ -445,13 +452,10 @@ function visible(cat) {
   let list = (S.places[cat] || []).slice();
   if (F.chip) list = list.filter(p => p.chips.includes(F.chip));
   if (F.q) { const s = F.q.toLowerCase(); list = list.filter(p => p.name.toLowerCase().includes(s)); }
-  if (F.veg) list = list.filter(p => ['yes', 'only'].includes(p.tags['diet:vegetarian']) || ['yes', 'only'].includes(p.tags['diet:vegan']));
   const by = {
     dist: (a, b) => a.dist - b.dist,
     name: (a, b) => a.name.localeCompare(b.name),
     notable: (a, b) => (b.notable - a.notable) || (a.dist - b.dist),
-    price: (a, b) => estPrice(a) - estPrice(b),
-    stars: (a, b) => (parseFloat(b.tags.stars) || 0) - (parseFloat(a.tags.stars) || 0) || (a.dist - b.dist),
   };
   return list.sort(by[F.sort] || by.dist);
 }
@@ -493,14 +497,6 @@ const breakdownHtml = (pr, unit) => `<details class="small"><summary>See taxes, 
   <div class="row between bd-t"><b>All-in</b><b>${money(pr.total)}</b></div>
   <div class="muted">Taxes, fees${pr.lines.some(l => /toll|fuel/i.test(l.label)) ? ', fuel &amp; tolls' : ''} ≈ ${Math.round(pr.tax / pr.total * 100)}% of the total</div></div></details>`;
 
-function stayBase(p) {
-  const R = S.region, t = p.tags || {};
-  const base = R.stay[p.sub] ?? R.stay.hotel;
-  const stars = Math.round(parseFloat(t.stars));
-  const mult = p.sub === 'hotel' || p.sub === 'resort' ? (STAR_MULT[stars] ?? 1) : 1;
-  return base * mult * (S.trip?.tier ?? 1);
-}
-const estPrice = p => stayPrice(stayBase(p)).total;
 
 /* ============================== trip planning ============================== */
 function regionFor(trip) { return trip.to.cc === 'IN' ? REGIONS.IN : REGIONS.DEFAULT; }
@@ -662,9 +658,9 @@ function uiUpdate(cat) {
 }
 
 function renderTabs() {
-  $('#tabs').innerHTML = TABS.map(t =>
-    `<button class="tab ${S.tab === t.id ? 'on' : ''}" role="tab" data-act="tab" data-tab="${t.id}">${ico(t.ico)}${t.label}</button>`).join('');
-  $('#tabs .on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  const cur = groupOf(S.tab)?.id;
+  $('#tabs').innerHTML = GROUPS.map(g =>
+    `<button class="tab ${cur === g.id ? 'on' : ''}" role="tab" data-act="tab" data-tab="${g.id}">${ico(g.ico)}${g.label}</button>`).join('');
 }
 
 function renderLayerBar() {
@@ -674,9 +670,12 @@ function renderLayerBar() {
   }).join('');
 }
 
+let enterTimer;
 function setTab(tab, silent) {
   S.tab = tab;
   jSig = '';
+  const g = groupOf(tab); if (g) lastLeaf[g.id] = tab;
+  $('#content').classList.add('enter'); clearTimeout(enterTimer); enterTimer = setTimeout(() => $('#content').classList.remove('enter'), 600);
   renderTabs();
   const cats = TAB_CATS[tab] || [];
   S.layers = new Set(cats);
@@ -691,11 +690,13 @@ function setTab(tab, silent) {
 function renderContent() {
   const V = { overview: viewOverview, search: viewSearch, reach: viewReach, along: viewAlong, stay: () => viewCat('stay'), move: viewMove, eat: () => viewCat('food'), shop: () => viewCat('shop'), see: () => viewCat('see'), plan: viewPlan };
   const st = $('#content').scrollTop;
-  $('#content').innerHTML = (V[S.tab] || viewOverview)();
+  $('#content').innerHTML = segControl() + (V[S.tab] || viewOverview)();
   $('#content').scrollTop = st;
   (TAB_CATS[S.tab] || []).forEach(refreshList);
 }
 
+const fineprint = () => `<details class="fine"><summary>${ico('info', 'xs')} Prices are estimates</summary><p>${DISCLAIMER}</p></details>`;
+const skeleton = n => Array.from({ length: n }, () => '<div class="skel-card"><i></i><div><b></b><b></b></div></div>').join('');
 const needTrip = () => `<div class="empty">${ico('compass')}<p><b>Plan a trip first</b></p><p>Enter where you're travelling from and to in the bar above, then hit <b>Plan trip</b>.</p></div>`;
 const spinner = t => `<div class="muted"><span class="spinner"></span>${t}</div>`;
 const sec = (ic, title, extra = '') => `<h3>${ico(ic, 'xs')}${title}${extra}</h3>`;
@@ -723,7 +724,7 @@ function viewOverview() {
   const b = calcBudget();
   const max = Math.max(...b.rows.map(r => r.hi)) || 1;
   const fromN = T.from.city || T.from.name, toN = T.to.city || T.to.name;
-  const nav = [['search', 'search', 'Live search', 'Places, tips and web results'], ['reach', 'plane', 'Get there', 'Flight, train, bus or cab'], ['stay', 'bed', 'Stay', 'Hotels, homestays, Airbnb'], ['move', 'car', 'Get around', 'Cabs, rentals, metro'], ['eat', 'utensils', 'Eat', 'Restaurants and cafés'], ['see', 'pin', 'Explore', 'Sights on the map']];
+  const nav = [['reach', 'plane', 'Travel options', 'Flight, train, bus or cab'], ['along', 'route', 'On the way', 'Fuel, food and ATMs en route'], ['stay', 'bed', 'Find a stay', 'Typical rates and booking links'], ['see', 'pin', 'Explore', 'Sights, food and shopping']];
   return `
   <div class="hero">
     <div class="hero-route"><div><small>From</small><b>${esc(fromN)}</b></div><div class="hero-line">${ico('plane')}</div><div style="text-align:right"><small>To</small><b>${esc(toN)}</b></div></div>
@@ -740,19 +741,18 @@ function viewOverview() {
     ${rc ? `<div class="bud">${b.rows.map(r => `<div class="bl">${ico(r.ic)}<div><b>${r.k}</b><div class="small muted">${esc(r.sub || '')}</div></div></div><b>${range(r.lo, r.hi)}</b><div class="bar"><i style="width:${Math.max(4, r.hi / max * 100)}%"></i></div>`).join('')}
       <div class="tot">Total (all taxes included)</div><div class="tot">${range(b.lo, b.hi)}</div>
       <div class="small muted">of which taxes, fees, fuel &amp; tolls ≈</div><div class="small muted">${money(b.tax)}</div></div>
-      <p class="small muted" style="margin-top:10px">For ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}, ${['budget', 'comfort', 'premium'][[.6, 1, 2].indexOf(T.tier)] || 'comfort'} style. Change travellers, dates or style in the top bar. Open <b>Get there</b> and <b>Stay</b> for itemised taxes.</p>
-      <p class="note">${DISCLAIMER}</p>`
+      <p class="small muted" style="margin-top:10px">For ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}, ${['budget', 'comfort', 'premium'][[.6, 1, 2].indexOf(T.tier)] || 'comfort'} style. Change travellers, dates or style in the top bar. Open <b>Get there</b> and <b>Stay</b> for itemised taxes.</p>`
       : spinner('Working out routes…')}
   </div>
-  ${sec('compass', 'Plan it')}
+  ${sec('compass', 'Where next')}
   <div class="navgrid">${nav.map(([t, i, l, s]) => `<button class="navcard" data-act="tab" data-tab="${t}">${ico(i)}<b>${l}</b><small>${s}</small></button>`).join('')}</div>
   ${S.guide ? sec('globe', `About ${esc(toN)}`) + (guideBlock('Understand the destination', ['understand'], 1200) || `<div class="box"><div class="excerpt">${excerpt(S.guide.intro, 900)}</div></div>`) : ''}
-  ${sec('info', 'Tips')}
-  <div class="box"><ul style="margin:0;padding-left:18px">${S.region.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+  <details class="fine"><summary>${ico('info', 'xs')} Travel tips</summary><ul style="margin:8px 0 0;padding-left:18px">${S.region.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>
+  ${fineprint()}`;
 }
 
 function welcome() {
-  const feats = [['plane', 'Every way to get there', 'Flight, train, bus and cab compared, with the real route on the map.'], ['bed', 'Stays, any budget', 'Hotels, guest houses and Airbnb-style stays with all-in prices.'], ['search', 'Live search', 'Search places, tips and the web without leaving the map.'], ['calendar', 'Day-by-day plan', 'Drop spots into an itinerary and see every leg\'s distance and time.']];
+  const feats = [['plane', 'Every way to get there', 'Flight, train, bus and cab compared, with the real route on the map.'], ['bed', 'Stays, any budget', 'Typical nightly rates by kind of stay, with taxes included, plus booking links.'], ['search', 'Live search', 'Search places, tips and the web without leaving the map.'], ['calendar', 'Day-by-day plan', 'Drop spots into an itinerary and see every leg\'s distance and time.']];
   return `
   <div class="hero">
     <h2>Plan the whole trip in one place</h2>
@@ -818,28 +818,26 @@ function viewReach() {
     ${!rc.loading && !ap.from.length && !ap.to.length ? '<div class="small muted">No commercial airports found within 100 km of either city.</div>' : ''}
     ${rc.stations.length ? `<div class="small" style="margin-top:8px"><b>Stations near ${esc(toN)}</b></div>${rc.stations.map(a => `<div class="row between small" style="padding:3px 0"><span>${ico(a.sub === 'bus station' ? 'bus' : 'train', 'xs')} ${esc(a.name)}${a.code ? ` <span class="tag">${esc(a.code)}</span>` : ''}</span><span class="muted">${fmtKm(a.d)}</span></div>`).join('')}` : ''}
   </div>
-  <p class="note">${DISCLAIMER}</p>`;
+  ${fineprint()}`;
 }
 
 /* ---------- category tabs (stay / eat / shop / see) ---------- */
 const SORTS = {
-  stay: [['dist', 'Nearest'], ['price', 'Price ↑'], ['stars', 'Stars'], ['name', 'A–Z']],
+  stay: [['dist', 'Nearest'], ['name', 'A–Z']],
   food: [['dist', 'Nearest'], ['name', 'A–Z']],
   shop: [['dist', 'Nearest'], ['name', 'A–Z']],
   see: [['notable', 'Top sights'], ['dist', 'Nearest'], ['name', 'A–Z']],
-  rent: [['dist', 'Nearest'], ['name', 'A–Z']],
   transit: [['dist', 'Nearest'], ['name', 'A–Z']],
 };
 const RADII = [1, 2, 3, 5, 8, 12, 20, 30];
 
-function toolbar(cat, withVeg) {
+function toolbar(cat) {
   const F = filt(cat), r = (S.radius[cat] ?? CATEGORIES[cat].radius) / 1000;
   const radii = [...new Set([...RADII, r])].sort((a, b) => a - b);
   return `<div class="toolbar">
     <input type="search" placeholder="Filter ${CATEGORIES[cat].label.toLowerCase()}…" value="${esc(F.q)}" data-f="q" data-cat="${cat}">
     <select data-f="sort" data-cat="${cat}" title="Sort">${SORTS[cat].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <select data-f="radius" data-cat="${cat}" title="Search radius around city centre">${radii.map(v => `<option value="${v}" ${v === r ? 'selected' : ''}>${v} km</option>`).join('')}</select>
-    ${withVeg ? `<label class="chip ${F.veg ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" data-f="veg" data-cat="${cat}" ${F.veg ? 'checked' : ''} hidden>${ico('leaf', 'xs')}Veg only</label>` : ''}
   </div><div id="pchips-${cat}"></div>`;
 }
 
@@ -853,22 +851,26 @@ function viewCat(cat) {
     const bk = `https://www.booking.com/searchresults.html?ss=${q(city)}&checkin=${d.ci}&checkout=${d.co}&group_adults=${T.travelers}&no_rooms=${Math.ceil(T.travelers / 2)}`;
     const ag = `https://www.agoda.com/search?textToSearch=${q(city)}&checkIn=${d.ci}&checkOut=${d.co}&adults=${T.travelers}`;
     const gh = `https://www.google.com/travel/search?q=${q('hotels in ' + city)}`;
-    intro = `<div class="box"><h4>Book stays in ${esc(city)}</h4>
-      <div class="small muted">${n} night${n > 1 ? 's' : ''} · ${T.travelers} guest${T.travelers > 1 ? 's' : ''} – dates are pre-filled on each site.</div>
-      <div class="link-row">${linkBtns([['Airbnb', air], ['Booking.com', bk], ['Agoda', ag], ['Google Hotels', gh], ...S.region.links.stayExtra], 'btn sm solid')}</div>
-      <p class="small muted" style="margin:10px 0 0">Below: stays listed on OpenStreetMap. Use <b>Apartment</b> / <b>Guest house</b> filters for Airbnb-style options. Prices are estimated <b>all-in per room/night</b> (room tax and platform fee included; hover the price for the split). Tap <b>Prices</b> to compare rates on Google Hotels.</p>
-      <p class="note" style="margin-top:8px">${DISCLAIMER}</p></div>`;
+    const R = S.region, style = ['budget', 'comfort', 'premium'][[.6, 1, 2].indexOf(T.tier)] || 'comfort';
+    const kinds = [['hostel', 'Hostel / dorm bed'], ['guest_house', 'Guest house / homestay'], ['apartment', 'Apartment'], ['hotel', 'Hotel'], ['resort', 'Resort']];
+    const rates = kinds.map(([k, l]) => `<div class="rate"><span>${l}</span><b>${range(priceOf('stay', R.stay[k] * T.tier * .8).total, priceOf('stay', R.stay[k] * T.tier * 1.3).total)}</b></div>`).join('');
+    intro = `<div class="box"><h4>Typical nightly rates in ${esc(city)}</h4>
+      <div class="small muted">Per room, ${style} style, all taxes and fees included. OpenStreetMap has no prices, so these are estimates for each kind of stay, not quotes for the places listed below.</div>
+      <div class="rates">${rates}</div>
+      <div class="small muted" style="margin-top:12px">Check real prices and availability for ${n} night${n > 1 ? 's' : ''}, ${T.travelers} guest${T.travelers > 1 ? 's' : ''} (dates pre-filled):</div>
+      <div class="link-row" style="margin-top:6px">${linkBtns([['Airbnb', air], ['Booking.com', bk], ['Agoda', ag], ['Google Hotels', gh], ...S.region.links.stayExtra], 'btn sm solid')}</div>
+      ${fineprint()}</div>`;
   } else if (cat === 'food') intro = guideBlock('What to eat here', ['eat'], 1100);
   else if (cat === 'shop') intro = guideBlock('What to buy here', ['buy'], 1100);
   else if (cat === 'see') intro = guideBlock('Highlights', ['see'], 1100);
-  return `${intro}${toolbar(cat, cat === 'food')}<div id="plist-${cat}"></div>`;
+  return `${intro}${toolbar(cat)}<div id="plist-${cat}"></div>`;
 }
 
 function refreshList(cat) {
   const list = $('#plist-' + cat); if (!list) return;
   const chipsEl = $('#pchips-' + cat);
   const F = filt(cat), C = CATEGORIES[cat];
-  if (S.loading[cat]) { list.innerHTML = `<div class="box">${spinner(`Finding ${C.label.toLowerCase()} near ${esc(S.trip.to.name)}…`)}</div>`; if (chipsEl) chipsEl.innerHTML = ''; return; }
+  if (S.loading[cat]) { list.innerHTML = skeleton(3); if (chipsEl) chipsEl.innerHTML = ''; return; }
   if (S.errors[cat] && !S.places[cat]?.length) {
     list.innerHTML = `<div class="err">${esc(S.errors[cat])}</div><button class="btn sm" data-act="retry" data-cat="${cat}">${ico('refresh', 'xs')} Retry</button>`;
     if (chipsEl) chipsEl.innerHTML = ''; return;
@@ -878,7 +880,7 @@ function refreshList(cat) {
     const counts = {};
     all.forEach(p => p.chips.forEach(c => counts[c] = (counts[c] || 0) + 1));
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-    chipsEl.innerHTML = top.length ? `<div class="chips"><button class="chip ${F.chip ? '' : 'on'}" data-act="chip" data-cat="${cat}" data-v="">All ${all.length}</button>${top.map(([c, n]) => `<button class="chip ${F.chip === c ? 'on' : ''}" data-act="chip" data-cat="${cat}" data-v="${esc(c)}">${esc(c)} ${n}</button>`).join('')}</div>` : '';
+    chipsEl.innerHTML = top.length ? `<div class="chips scroll"><button class="chip ${F.chip ? '' : 'on'}" data-act="chip" data-cat="${cat}" data-v="">All ${all.length}</button>${top.map(([c, n]) => `<button class="chip ${F.chip === c ? 'on' : ''}" data-act="chip" data-cat="${cat}" data-v="${esc(c)}">${esc(c)} ${n}</button>`).join('')}</div>` : '';
   }
   const items = visible(cat), lim = S.limit[cat] || 20;
   list.innerHTML = (S.notes[cat] ? `<p class="note">${esc(S.notes[cat])}</p>` : '')
@@ -902,20 +904,14 @@ function detailTags(p) {
   const t = p.tags, out = [];
   const stars = parseFloat(t.stars);
   if (stars) out.push(`<span class="tag warn">${'★'.repeat(Math.min(5, Math.round(stars)))}</span>`);
-  if (p.cat === 'stay') {
-    const sp = stayPrice(stayBase(p));
-    const tip = `Room ${money(sp.base)}${sp.lines.map(l => ` + ${l.label} ${money(l.amt)}`).join('')} = ${money(sp.total)}`;
-    out.push(`<span class="tag good" title="${esc(tip)}">≈ ${money(sp.total)}/night incl. taxes</span>`);
-  }
   if (p.notable && p.cat === 'see') out.push(`<span class="tag good">${ico('star', 'xs')}Notable</span>`);
   if (p.cat === 'food' && ['yes', 'only'].includes(t['diet:vegetarian'])) out.push(`<span class="tag good">${ico('leaf', 'xs')}Veg-friendly</span>`);
   if (t.cuisine && p.cat === 'food') out.push(`<span class="tag">${esc(t.cuisine.split(';').slice(0, 2).map(pretty).join(', '))}</span>`);
   if (t.opening_hours) out.push(`<span class="tag" title="${esc(t.opening_hours)}">${ico('clock', 'xs')}${esc(t.opening_hours.length > 30 ? t.opening_hours.slice(0, 28) + '…' : t.opening_hours)}</span>`);
   if (['wlan', 'yes', 'wifi'].includes(t.internet_access)) out.push('<span class="tag">Wi-Fi</span>');
-  if (t.wheelchair === 'yes') out.push('<span class="tag">Accessible</span>');
   if (t.fee === 'no') out.push('<span class="tag good">Free entry</span>');
   if (t.iata) out.push(`<span class="tag">${esc(t.iata)}</span>`);
-  return out.join('');
+  return out.slice(0, 4).join('');
 }
 
 function actionsHtml(p, popup) {
@@ -923,25 +919,22 @@ function actionsHtml(p, popup) {
   const inPlan = S.plan.items.some(i => i.key === p.key);
   const web = safeUrl(t.website || t['contact:website']);
   const tel = (t.phone || t['contact:phone'] || '').replace(/[^+\d]/g, '');
+  const ib = (href, icon, title) => `<a class="ibtn" target="_blank" rel="noopener" href="${esc(href)}" title="${title}" aria-label="${title}">${ico(icon)}</a>`;
+  const mapBtn = popup ? '' : `<button class="ibtn" data-act="focus" data-key="${p.key}" title="Show on map" aria-label="Show on map">${ico('pin')}</button>`;
+  const extras = `${web ? ib(web, 'link', 'Website') : ''}${tel ? `<a class="ibtn" href="tel:${esc(tel)}" title="Call" aria-label="Call">${ico('phone')}</a>` : ''}`;
   if (p.along != null) {   // a stop on the way: offer the route via this place instead of itinerary actions
     const { from, to } = S.trip;
     const via = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lon}&destination=${to.lat},${to.lon}&waypoints=${p.lat},${p.lon}&travelmode=driving`;
-    return `${popup ? '' : `<button class="btn sm" data-act="focus" data-key="${p.key}">${ico('pin', 'xs')}Map</button>`}
-      <a class="btn sm solid" target="_blank" rel="noopener" href="${via}">${ico('route', 'xs')}Route via here</a>
-      <a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${q(p.name + ' ' + p.lat + ',' + p.lon)}">${ico('star', 'xs')}Reviews</a>
-      ${web ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(web)}">${ico('link', 'xs')}Website</a>` : ''}
-      ${tel ? `<a class="btn sm" href="tel:${esc(tel)}">${ico('phone', 'xs')}Call</a>` : ''}`;
+    return `<a class="btn sm solid" target="_blank" rel="noopener" href="${via}">${ico('route', 'xs')}Route via here</a>${mapBtn}
+      ${ib(`https://www.google.com/maps/search/?api=1&query=${q(p.name + ' ' + p.lat + ',' + p.lon)}`, 'star', 'Reviews on Google Maps')}${extras}`;
   }
   const dir = `https://www.google.com/maps/dir/?api=1&origin=${S.base.lat},${S.base.lon}&destination=${p.lat},${p.lon}&travelmode=driving`;
   const rev = `https://www.google.com/maps/search/?api=1&query=${q(p.name + ' ' + city)}`;
   const px = `https://www.google.com/travel/search?q=${q(p.name + ' ' + city)}`;
-  return `<button class="btn sm solid" data-act="plan-add" data-key="${p.key}">${ico(inPlan ? 'check' : 'plus', 'xs')}${inPlan ? 'In plan' : 'Add to plan'}</button>
-    ${popup ? '' : `<button class="btn sm" data-act="focus" data-key="${p.key}">${ico('pin', 'xs')}Map</button>`}
-    ${p.cat === 'stay' ? `<button class="btn sm" data-act="set-base" data-key="${p.key}">${ico('home', 'xs')}Use as base</button><a class="btn sm" target="_blank" rel="noopener" href="${px}">${ico('wallet', 'xs')}Prices</a>` : ''}
-    <a class="btn sm" target="_blank" rel="noopener" href="${dir}">${ico('nav', 'xs')}Directions</a>
-    ${['food', 'shop', 'see'].includes(p.cat) ? `<a class="btn sm" target="_blank" rel="noopener" href="${rev}">${ico('star', 'xs')}Reviews</a>` : ''}
-    ${web ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(web)}">${ico('link', 'xs')}Website</a>` : ''}
-    ${tel ? `<a class="btn sm" href="tel:${esc(tel)}">${ico('phone', 'xs')}Call</a>` : ''}`;
+  return `<button class="btn sm solid" data-act="plan-add" data-key="${p.key}">${ico(inPlan ? 'check' : 'plus', 'xs')}${inPlan ? 'In plan' : 'Add to plan'}</button>${mapBtn}
+    ${p.cat === 'stay' ? `<button class="ibtn" data-act="set-base" data-key="${p.key}" title="Measure distances from here" aria-label="Use as base">${ico('home')}</button>` : ''}
+    ${ib(dir, 'nav', 'Directions')}
+    ${['food', 'shop', 'see'].includes(p.cat) ? ib(rev, 'star', 'Reviews on Google Maps') : p.cat === 'stay' ? ib(px, 'wallet', 'Compare prices on Google Hotels') : ''}${extras}`;
 }
 
 function cardHtml(p) {
@@ -950,7 +943,7 @@ function cardHtml(p) {
   return `<article class="pcard" data-key="${p.key}">
     <div class="pc-top"><div class="pc-ico" style="--c:${pi.color}">${ico(pi.ic)}</div>
       <div class="pc-main"><h4>${esc(p.name)}</h4><div class="pc-sub">${esc(pretty(p.sub))}${addr ? ' · ' + esc(addr) : ''}</div></div>${distBlock(p)}</div>
-    <div class="pc-meta">${detailTags(p)}</div>
+    ${detailTags(p) ? `<div class="pc-meta">${detailTags(p)}</div>` : ''}
     <div class="pc-actions">${actionsHtml(p, false)}</div></article>`;
 }
 
@@ -975,7 +968,6 @@ function guessCat(x) {
   if (c === 'amenity' && ['restaurant', 'cafe', 'fast_food', 'food_court', 'ice_cream', 'bar', 'pub'].includes(t)) return 'food';
   if (c === 'shop' || (c === 'amenity' && t === 'marketplace')) return 'shop';
   if (c === 'railway' || c === 'aeroway' || t === 'bus_station') return 'transit';
-  if (c === 'amenity' && t === 'car_rental') return 'rent';
   return 'see';
 }
 
@@ -1202,10 +1194,9 @@ function viewMove() {
     <div class="link-row">${linkBtns(R.links.rent, 'btn sm solid')}</div>
     <p class="small muted" style="margin:8px 0 0">You usually need a valid driving licence (and an IDP abroad), ID and a deposit.</p>
   </div>
-  ${sec('key', 'Rental shops &amp; garages nearby')}
-  ${toolbar('rent', false)}<div id="plist-rent"></div>
   ${sec('train', 'Airports, stations &amp; metro')}
-  ${toolbar('transit', false)}<div id="plist-transit"></div>`;
+  ${toolbar('transit')}<div id="plist-transit"></div>
+  ${fineprint()}`;
 }
 
 /* ---------- itinerary ---------- */
@@ -1292,7 +1283,7 @@ function save() {
 
 /* ============================== events ============================== */
 const ACT = {
-  tab: el => setTab(el.dataset.tab),
+  tab: el => setTab(resolveTab(el.dataset.tab)),
   sample: el => {
     const [a, b] = SAMPLE_TRIPS[+el.dataset.i];
     $('#fromInput').value = a; $('#toInput').value = b;
@@ -1383,7 +1374,6 @@ document.addEventListener('change', e => {
   const el = e.target, cat = el.dataset.cat;
   if (el.dataset.f === 'sort') { filt(cat).sort = el.value; refreshList(cat); }
   else if (el.dataset.f === 'radius') { S.radius[cat] = +el.value * 1000; S.places[cat] = null; loadCat(cat, true); }
-  else if (el.dataset.f === 'veg') { filt(cat).veg = el.checked; el.parentElement.classList.toggle('on', el.checked); refreshList(cat); refreshMarkers(); }
 });
 document.addEventListener('submit', e => {
   if (e.target.id !== 'alongForm') return;

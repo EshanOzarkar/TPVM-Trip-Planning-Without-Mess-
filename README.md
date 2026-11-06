@@ -16,22 +16,29 @@ Then open http://localhost:5174.
 
 ## What it does
 
+Five tabs, with a switcher inside the busier ones:
+
 | Tab | Content |
 | --- | --- |
-| Overview | The journey drawn on the map (real road route, flight arc, distance and time), weather, rough budget, Wikivoyage destination guide |
-| Search | Live search as you type: places near your destination (OpenStreetMap), travel guides (Wikivoyage), background (Wikipedia), plus one-click web search on Google, Bing, DuckDuckGo, Google Maps, Tripadvisor and Reddit |
-| On the way | Search along your road route for petrol pumps, food, cafés, ATMs, hospitals, pharmacies, hotels, EV charging, toilets, car repair and sights, listed in driving order with how far each is from the start and off the road. Also free text such as "dhaba" or "temple" |
-| Get there | Flight / train / bus / cab / self-drive compared (time + estimated all-in fare), nearest airports & stations, links to booking sites. Click an option to see its journey on the map |
-| Stay | Hotels, hostels, guest houses, apartments with an estimated price per night, plus Airbnb / Booking.com / Agoda / Google Hotels links with dates pre-filled |
-| Get around | Ride-hailing fare table, rental daily rates, rental shops, stations & metro |
-| Eat / Shop / Explore | Places on the map with road distance + drive/walk time from your base, filters, search, sort |
-| Itinerary | Multi-day plan, per-leg distance/time, route on map, nearest-next optimiser, Google Maps export, copy/print |
+| Trip | The journey drawn on the map (real road route, flight arc, distance and time), weather, rough budget, Wikivoyage destination guide |
+| Travel | **Options:** flight / train / bus / cab / self-drive compared (time and estimated all-in fare), nearest airports and stations, links to booking sites; click an option to see its journey on the map. **On the way:** petrol pumps, food, cafés, ATMs, hospitals, pharmacies, hotels, EV charging, toilets, car repair and sights along your road route, in driving order, plus free-text search such as "dhaba" or "temple" |
+| Stay | Typical nightly rates by kind of stay (hostel, guest house, apartment, hotel, resort) with taxes included, booking links with dates pre-filled (Airbnb, Booking.com, Agoda, Google Hotels), and stays listed on OpenStreetMap |
+| Explore | **Sights, Food, Shopping** on the map with road distance and drive/walk time from your base, plus **Local rides** (ride-hailing fares, rental day rates, airports, stations and metro) |
+| Itinerary | Multi-day plan, per-leg distance and time, route on the map, nearest-next optimiser, Google Maps export, copy and print |
+
+The search box above the tabs searches live as you type: places near your destination (OpenStreetMap), travel guides (Wikivoyage), background (Wikipedia), plus one-click web search on Google, Bing, DuckDuckGo, Google Maps, Tripadvisor and Reddit. Everyday words like "petrol pump", "dhaba" and "chemist" are understood.
+
+Every place type has its own icon and colour on the map and in the lists.
+
+### What is deliberately not included
+
+Features that free data can't support well were removed rather than faked. In a check on Jaipur, only 7% of restaurants carried a vegetarian tag, 1% of stays a star rating and only 3 rental shops were mapped. So there is no veg-only filter, no per-hotel price or star sort, no rental-shop list and no live fares or availability. Prices are category-level estimates and booking buttons open the provider's own site.
 
 "Use as base" on any stay re-measures every distance from that hotel.
 
 ## Prices and taxes (estimates)
 
-Every price shown is an **estimate**: a typical market base price plus itemised taxes and fees, so you see the full picture. Open *See taxes, fees & tolls* on a travel option, or hover a hotel's price, for the split.
+Every price shown is an **estimate**: a typical market base price plus itemised taxes and fees, so you see the full picture. Open *See taxes, fees & tolls* on a travel option for the split.
 
 | Item | Taxes / fees modelled (India) |
 | --- | --- |
