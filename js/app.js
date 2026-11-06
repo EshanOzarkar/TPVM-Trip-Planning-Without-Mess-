@@ -177,53 +177,121 @@ function dayLabel(d) {
   return s.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-/* ============================== map ============================== */
-let map; const groups = {}; const markers = {}; const planMarkers = {};
-let baseGroup, planGroup, routeGroup, reachGroup, searchGroup, alongGroup;
+/* ============================== map (MapLibre GL + OpenFreeMap vector tiles) ============================== */
+let map;
+const MAP_STYLES = [
+  { id: 'liberty', label: 'Detailed', url: 'https://tiles.openfreemap.org/styles/liberty' },
+  { id: 'positron', label: 'Light', url: 'https://tiles.openfreemap.org/styles/positron' },
+  { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright' },
+];
+let styleIdx = 0;
+try { const i = MAP_STYLES.findIndex(s => s.id === localStorage.getItem('tpvm.style')); if (i >= 0) styleIdx = i; } catch { /* ignore */ }
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const pinIcon = (inner, cls = '', color = '#0d9488', size = 30) => L.divIcon({
-  className: '', html: `<div class="pin ${cls}" style="--c:${color}">${inner}</div>`,
-  iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 + 2],
-});
-const labelIcon = html => L.divIcon({ className: 'lbl', html, iconSize: [0, 0] });
+const groups = {};     // marker groups: name -> [maplibregl.Marker]
+const groupSig = {};   // what each group currently shows, so unchanged groups are not rebuilt
+const markers = {};    // place key -> { lat, lon, popup }
+let curPopup = null;
+const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
+const lineData = { journey: emptyFC(), plan: emptyFC() };
+
+const pinHtml = (inner, color = '#0d9488', size = 30, cls = '') => `<div class="pin ${cls}" style="--c:${color};width:${size}px;height:${size}px">${inner}</div>`;
+const lineFeature = (coords, props) => ({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: coords.map(c => [c[1], c[0]]) } });
+
+function addMarker(group, { lat, lon, html, z = 1, popup, onClick, key, interactive = true }) {
+  const el = document.createElement('div');
+  el.className = 'mk'; el.innerHTML = html; el.style.zIndex = z;
+  if (!interactive) el.style.pointerEvents = 'none';
+  const m = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([lon, lat]).addTo(map);
+  if (interactive && (popup || onClick)) el.addEventListener('click', ev => { ev.stopPropagation(); if (popup) showPopup(lon, lat, popup()); onClick?.(); });
+  (groups[group] ||= []).push(m);
+  if (key) markers[key] = { lat, lon, popup };
+  return m;
+}
+function clearGroup(g) { (groups[g] || []).forEach(m => m.remove()); groups[g] = []; groupSig[g] = ''; }
+/** Rebuild a group only when what it shows has changed. */
+function syncGroup(g, sig, build) {
+  if (groupSig[g] === sig) return;
+  clearGroup(g); groupSig[g] = sig; build();
+}
+function showPopup(lon, lat, html, offset = 18) {
+  curPopup?.remove();
+  curPopup = new maplibregl.Popup({ offset, maxWidth: '300px' }).setLngLat([lon, lat]).setHTML(html).addTo(map);
+}
+const closePopup = () => { curPopup?.remove(); curPopup = null; };
 
 function initMap() {
-  map = L.map('map', { zoomControl: false }).setView([22.5, 79], 5);
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  }).addTo(map);
-  routeGroup = L.layerGroup().addTo(map);
-  reachGroup = L.layerGroup().addTo(map);
-  LAYER_ORDER.forEach(c => groups[c] = L.layerGroup().addTo(map));
-  searchGroup = L.layerGroup().addTo(map);
-  alongGroup = L.layerGroup().addTo(map);
-  planGroup = L.layerGroup().addTo(map);
-  baseGroup = L.layerGroup().addTo(map);
+  map = new maplibregl.Map({
+    container: 'map', style: MAP_STYLES[styleIdx].url, center: [79, 22.5], zoom: 3.6,
+    attributionControl: false, maxPitch: 70, dragRotate: true,
+  });
+  map.addControl(new maplibregl.AttributionControl({ compact: true }));
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+  map.on('style.load', setupLayers);
+  map.on('error', e => console.warn('map:', e.error?.message || e));
+  $('#styleName').textContent = MAP_STYLES[styleIdx].label;
+  $('#btnStyle').addEventListener('click', () => {
+    styleIdx = (styleIdx + 1) % MAP_STYLES.length;
+    try { localStorage.setItem('tpvm.style', MAP_STYLES[styleIdx].id); } catch { /* ignore */ }
+    $('#styleName').textContent = MAP_STYLES[styleIdx].label;
+    map.setStyle(MAP_STYLES[styleIdx].url, { diff: false });   // full reload, so style.load re-creates our route layers
+  });
+  let tilted = false;
+  $('#btn3d').addEventListener('click', () => {
+    tilted = !tilted;
+    $('#btn3d').classList.toggle('on', tilted);
+    map.easeTo({ pitch: tilted ? 58 : 0, bearing: tilted ? -18 : 0, zoom: tilted ? Math.max(map.getZoom(), 14.2) : map.getZoom(), duration: reduceMotion() ? 0 : 1000 });
+  });
+}
+
+/** (Re)create our line sources and layers; runs for every style, including after a style switch. */
+function setupLayers() {
+  if (map.getSource('journey')) return;
+  const first = map.getStyle().layers.find(l => l.type === 'symbol')?.id;   // keep lines under the labels
+  const round = { 'line-cap': 'round', 'line-join': 'round' };
+  const road = ['==', ['get', 'kind'], 'road'];
+  map.addSource('journey', { type: 'geojson', data: lineData.journey });
+  map.addLayer({ id: 'journey-glow', type: 'line', source: 'journey', filter: road, layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['+', ['get', 'w'], 12], 'line-opacity': .22, 'line-blur': 7 } }, first);
+  map.addLayer({ id: 'journey-casing', type: 'line', source: 'journey', filter: road, layout: round, paint: { 'line-color': '#ffffff', 'line-width': ['+', ['get', 'w'], 4], 'line-opacity': .95 } }, first);
+  map.addLayer({ id: 'journey-road', type: 'line', source: 'journey', filter: road, layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'w'], 'line-opacity': ['get', 'o'] } }, first);
+  map.addLayer({ id: 'journey-air', type: 'line', source: 'journey', filter: ['!=', ['get', 'kind'], 'road'], layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'w'], 'line-opacity': ['get', 'o'], 'line-dasharray': [0.1, 2.4] } }, first);
+  map.addSource('plan', { type: 'geojson', data: lineData.plan });
+  map.addLayer({ id: 'plan-casing', type: 'line', source: 'plan', layout: round, paint: { 'line-color': '#ffffff', 'line-width': 9, 'line-opacity': .92 } }, first);
+  map.addLayer({ id: 'plan-main', type: 'line', source: 'plan', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-opacity': .95 } }, first);
+}
+function setLineData(id, features) {
+  lineData[id] = { type: 'FeatureCollection', features };
+  try { map.getSource(id)?.setData(lineData[id]); } catch { /* style still loading; setupLayers will pick the data up */ }
+}
+
+/** Fit the map to [[lat, lon], ...]. */
+function fitPts(pts, { pad = { top: 60, bottom: 40, left: 40, right: 40 }, maxZoom = 15 } = {}) {
+  if (!pts.length || !map) return;
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const [la, lo] of pts) { w = Math.min(w, lo); e = Math.max(e, lo); s = Math.min(s, la); n = Math.max(n, la); }
+  const duration = reduceMotion() ? 0 : 900;
+  if (w === e && s === n) map.flyTo({ center: [w, s], zoom: Math.min(maxZoom, 13), duration });
+  else map.fitBounds([[w, s], [e, n]], { padding: pad, maxZoom, duration });
 }
 
 function refreshMarkers() {
   if (!map) return;
   const active = TAB_CATS[S.tab] || [];
   LAYER_ORDER.forEach(cat => {
-    const g = groups[cat]; g.clearLayers();
-    if (!S.layers.has(cat)) return;
+    if (!S.layers.has(cat)) { clearGroup(cat); return; }
     const list = active.includes(cat) ? visible(cat) : (S.places[cat] || []).slice().sort((a, b) => a.dist - b.dist).slice(0, 80);
-    list.forEach(p => {
+    syncGroup(cat, list.map(p => p.key).join(','), () => list.forEach(p => {
       const pi = placeIcon(p);
-      const m = L.marker([p.lat, p.lon], { icon: pinIcon(ico(pi.ic), '', pi.color, 26) });
-      m.bindPopup(() => popupHtml(p));
-      m.on('click', () => flashCard(p.key));
-      markers[p.key] = m; g.addLayer(m);
-    });
+      addMarker(cat, { lat: p.lat, lon: p.lon, html: pinHtml(ico(pi.ic), pi.color, 26), key: p.key, popup: () => popupHtml(p), onClick: () => flashCard(p.key) });
+    }));
   });
-  baseGroup.clearLayers();
   if (S.base && S.trip) {
-    L.marker([S.base.lat, S.base.lon], { icon: pinIcon(ico('home'), 'base', '#0f172a', 36), zIndexOffset: 800 })
-      .bindPopup(`<div class="pp"><h4>${ico('home')} Your base</h4><div class="small muted">${esc(S.base.name)}<br>All distances &amp; times are measured from here.</div>
-        ${S.base.custom ? '<div class="pc-actions"><button class="btn sm" data-act="reset-base">Reset to city centre</button></div>' : ''}</div>`)
-      .addTo(baseGroup);
-  }
+    syncGroup('base', `${S.base.lat},${S.base.lon},${S.base.custom}`, () => addMarker('base', {
+      lat: S.base.lat, lon: S.base.lon, html: pinHtml(ico('home'), '#0f172a', 36, 'base'), z: 800,
+      popup: () => `<div class="pp"><h4>${ico('home')} Your base</h4><div class="small muted">${esc(S.base.name)}<br>All distances &amp; times are measured from here.</div>
+        ${S.base.custom ? '<div class="pc-actions"><button class="btn sm" data-act="reset-base">Reset to city centre</button></div>' : ''}</div>`,
+    }));
+  } else clearGroup('base');
   drawJourney();
   drawSearch();
   drawAlong();
@@ -245,6 +313,37 @@ function greatCircle(a, b, n = 64) {
   }
   return pts;
 }
+const bearing = (a, b) => {
+  const y = Math.sin(rad(b[1] - a[1])) * Math.cos(rad(b[0]));
+  const x = Math.cos(rad(a[0])) * Math.sin(rad(b[0])) - Math.sin(rad(a[0])) * Math.cos(rad(b[0])) * Math.cos(rad(b[1] - a[1]));
+  return Math.atan2(y, x) * 180 / Math.PI;
+};
+
+/* A small marker that travels the journey: a plane along the arc, a glowing dot along the road. */
+let travel = null;
+function stopTravel() { if (travel) { cancelAnimationFrame(travel.raf); travel.marker.remove(); travel = null; } }
+function startTravel(pts, kind) {
+  stopTravel();
+  if (pts.length < 2 || reduceMotion()) return;
+  const step = Math.max(1, Math.floor(pts.length / 500)), path = pts.filter((_, i) => i % step === 0);
+  path.push(pts[pts.length - 1]);
+  const el = document.createElement('div');
+  el.className = 'traveler ' + kind;
+  el.innerHTML = kind === 'air' ? ico('plane') : '<i></i>';
+  const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([path[0][1], path[0][0]]).addTo(map);
+  const dur = kind === 'air' ? 5200 : 9000, rest = 1100;
+  let t0 = null;
+  const tick = ts => {
+    t0 ??= ts;
+    const f = ((ts - t0) % (dur + rest)) / dur, t = Math.min(1, f), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const idx = e * (path.length - 1), i = Math.floor(idx), j = Math.min(i + 1, path.length - 1), fr = idx - i;
+    marker.setLngLat([path[i][1] + (path[j][1] - path[i][1]) * fr, path[i][0] + (path[j][0] - path[i][0]) * fr]);
+    if (kind === 'air' && i !== j) el.firstChild.style.transform = `rotate(${bearing(path[i], path[j]) - 45}deg)`;
+    el.style.opacity = f > 1 ? 0 : 1;
+    travel.raf = requestAnimationFrame(tick);
+  };
+  travel = { marker, raf: requestAnimationFrame(tick) };
+}
 
 /** Which travel option is highlighted on the map (defaults to the cheapest). */
 const selMode = () => S.mode || calcModes().find(m => m.cheapest)?.id || (S.reach?.road ? 'cab' : 'flight');
@@ -256,7 +355,7 @@ let jSig = '';
    on the journey tabs, as a thinner line with small end pins everywhere else. */
 function drawJourney() {
   const hud = $('#hud');
-  if (!S.trip) { reachGroup.clearLayers(); jSig = ''; hud.classList.remove('show'); return; }
+  if (!S.trip) { clearGroup('journey'); setLineData('journey', []); stopTravel(); jSig = ''; hud.classList.remove('show'); return; }
   const full = onJourneyTab();
   const { from, to } = S.trip, rc = S.reach, kind = journeyKind(), air = hav(from, to);
   const fromN = from.city || from.name, toN = to.city || to.name;
@@ -267,34 +366,32 @@ function drawJourney() {
   const sig = [full ? S.tab : 'thin', from.lat, to.lat, kind, rc?.coords?.length || 0, rc?.airports.from.length, rc?.airports.to.length, rc?.stations.length].join('|');
   if (sig === jSig) return;
   jSig = sig;
-  reachGroup.clearLayers();
+  clearGroup('journey');
 
-  const arc = greatCircle(from, to), showArc = air >= 150;
-  const w = full ? 1 : .7;
-  if (showArc) L.polyline(arc, { color: '#6366f1', weight: (kind === 'air' ? 4 : 2.5) * w, opacity: kind === 'air' ? .95 : .4, lineCap: 'round', className: kind === 'air' ? 'flow' : '', interactive: false }).addTo(reachGroup);
-  if (rc?.coords?.length) {
-    L.polyline(rc.coords, { color: '#fff', weight: (kind === 'road' ? 10 : 7) * w, opacity: .9, interactive: false }).addTo(reachGroup);
-    L.polyline(rc.coords, { color: kind === 'road' ? '#0d9488' : '#94a3b8', weight: (kind === 'road' ? 5 : 3.5) * w, opacity: kind === 'road' ? 1 : .8, interactive: false }).addTo(reachGroup);
-  } else if (!showArc) {
-    L.polyline([[from.lat, from.lon], [to.lat, to.lon]], { color: '#0d9488', weight: 4 * w, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(reachGroup);
-  }
+  const arc = greatCircle(from, to), showArc = air >= 150, w = full ? 1 : .7;
+  const feats = [];
+  if (showArc) feats.push(lineFeature(arc, { kind: 'air', color: '#6366f1', w: (kind === 'air' ? 4.5 : 3) * w, o: kind === 'air' ? .95 : .45 }));
+  if (rc?.coords?.length) feats.push(lineFeature(rc.coords, { kind: 'road', color: kind === 'road' ? '#0d9488' : '#94a3b8', w: (kind === 'road' ? 5.5 : 4) * w, o: kind === 'road' ? 1 : .8 }));
+  else if (!showArc) feats.push(lineFeature([[from.lat, from.lon], [to.lat, to.lon]], { kind: 'straight', color: '#0d9488', w: 4 * w, o: 1 }));
+  setLineData('journey', feats);
+
+  const mkPop = html => () => html;
   if (full) {
     const mid = kind === 'road' && rc?.coords?.length ? rc.coords[Math.floor(rc.coords.length / 2)] : arc[Math.floor(arc.length / 2)];
-    L.marker(mid, { icon: labelIcon(`<div class="routelabel">${text}</div>`), interactive: false, zIndexOffset: 400 }).addTo(reachGroup);
-    const end = (p, letter, color, label) => L.marker([p.lat, p.lon], { icon: labelIcon(`<div class="endpin" style="--c:${color}"><i>${letter}</i>${esc(label)}</div>`), zIndexOffset: 900 })
-      .bindPopup(`<b>${esc(p.label)}</b>`).addTo(reachGroup);
+    addMarker('journey', { lat: mid[0], lon: mid[1], html: `<div class="routelabel">${text}</div>`, z: 400, interactive: false });
+    const end = (p, letter, color, label) => addMarker('journey', { lat: p.lat, lon: p.lon, html: `<div class="endpin" style="--c:${color}"><i>${letter}</i>${esc(label)}</div>`, z: 900, popup: mkPop(`<b>${esc(p.label)}</b>`) });
     end(from, 'A', '#0d9488', fromN); end(to, 'B', '#e11d48', toN);
+    startTravel(kind === 'road' && rc?.coords?.length ? rc.coords : arc, kind === 'road' && rc?.coords?.length ? 'road' : 'air');
   } else {
-    const dot = (p, letter, color) => L.marker([p.lat, p.lon], { icon: pinIcon(letter, '', color, 22), zIndexOffset: 300 }).bindPopup(`<b>${esc(p.label)}</b>`).addTo(reachGroup);
+    stopTravel();
+    const dot = (p, letter, color) => addMarker('journey', { lat: p.lat, lon: p.lon, html: pinHtml(letter, color, 22), z: 300, popup: mkPop(`<b>${esc(p.label)}</b>`) });
     dot(from, 'A', '#0d9488'); dot(to, 'B', '#e11d48');
   }
   if (S.tab === 'reach') {
     (rc?.airports.from || []).concat(rc?.airports.to || []).forEach(a =>
-      L.marker([a.lat, a.lon], { icon: pinIcon(ico('plane'), '', '#475569', 26) })
-        .bindPopup(`<b>${esc(a.name)}</b>${a.iata ? ` (${esc(a.iata)})` : ''}<br><span class="small muted">${fmtKm(a.d)} from city centre</span>`).addTo(reachGroup));
+      addMarker('journey', { lat: a.lat, lon: a.lon, html: pinHtml(ico('plane'), '#475569', 26), popup: mkPop(`<b>${esc(a.name)}</b>${a.iata ? ` (${esc(a.iata)})` : ''}<br><span class="small muted">${fmtKm(a.d)} from city centre</span>`) }));
     (rc?.stations || []).forEach(a =>
-      L.marker([a.lat, a.lon], { icon: pinIcon(ico(a.sub === 'bus station' ? 'bus' : 'train'), '', '#475569', 26) })
-        .bindPopup(`<b>${esc(a.name)}</b><br><span class="small muted">${esc(pretty(a.sub))} · ${fmtKm(a.d)} from centre</span>`).addTo(reachGroup));
+      addMarker('journey', { lat: a.lat, lon: a.lon, html: pinHtml(ico(a.sub === 'bus station' ? 'bus' : 'train'), '#475569', 26), popup: mkPop(`<b>${esc(a.name)}</b><br><span class="small muted">${esc(pretty(a.sub))} · ${fmtKm(a.d)} from centre</span>`) }));
   }
 }
 
@@ -302,64 +399,51 @@ function fitJourney() {
   if (!S.trip || !map) return;
   const { from, to } = S.trip, rc = S.reach;
   const pts = journeyKind() === 'road' && rc?.coords?.length ? rc.coords : [[from.lat, from.lon], [to.lat, to.lon]];
-  map.fitBounds(L.latLngBounds(pts).extend([from.lat, from.lon]).extend([to.lat, to.lon]), { paddingTopLeft: [50, 90], paddingBottomRight: [50, 50], maxZoom: 11 });
+  fitPts(pts.concat([[from.lat, from.lon], [to.lat, to.lon]]), { pad: { top: 90, bottom: 60, left: 60, right: 60 }, maxZoom: 11 });
 }
 
 function drawPlan() {
-  planGroup.clearLayers(); routeGroup.clearLayers();
-  for (const k in planMarkers) delete planMarkers[k];
+  const feats = [], pins = [];
   for (let d = 1; d <= S.plan.days; d++) {
     const color = DAY_COLORS[(d - 1) % DAY_COLORS.length];
-    const items = S.plan.items.filter(i => i.day === d);
-    const r = S.routes[d];
-    if (r?.coords?.length) {
-      L.polyline(r.coords, { color: '#fff', weight: 9, opacity: .9, interactive: false }).addTo(routeGroup);
-      L.polyline(r.coords, { color, weight: 5, opacity: .95, interactive: false }).addTo(routeGroup);
-    }
-    items.forEach((it, idx) => {
-      const m = L.marker([it.place.lat, it.place.lon], { icon: pinIcon(idx + 1, '', color, 30), zIndexOffset: 500 });
-      m.bindPopup(() => popupHtml(findPlace(it.key) || it.place));
-      planMarkers[it.key] = m; planGroup.addLayer(m);
-    });
+    const items = S.plan.items.filter(i => i.day === d), r = S.routes[d];
+    if (r?.coords?.length) feats.push(lineFeature(r.coords, { color }));
+    items.forEach((it, idx) => pins.push({ it, idx, color }));
   }
+  setLineData('plan', feats);
+  syncGroup('plan', pins.map(x => `${x.it.key}:${x.idx}:${x.color}`).join(','), () => pins.forEach(({ it, idx, color }) =>
+    addMarker('plan', { lat: it.place.lat, lon: it.place.lon, html: pinHtml(idx + 1, color, 30), z: 500, key: it.key, popup: () => popupHtml(findPlace(it.key) || it.place) })));
 }
 
 function drawSearch() {
-  searchGroup.clearLayers();
-  if (S.tab !== 'search') return;
-  S.search.places.forEach(p => {
+  if (S.tab !== 'search') { clearGroup('search'); return; }
+  const list = S.search.places;
+  syncGroup('search', list.map(p => p.key).join(','), () => list.forEach(p => {
     const pi = placeIcon(p);
-    const m = L.marker([p.lat, p.lon], { icon: pinIcon(ico(pi.ic), '', pi.color, 28) });
-    m.bindPopup(() => popupHtml(p));
-    m.on('click', () => flashCard(p.key));
-    markers[p.key] = m; searchGroup.addLayer(m);
-  });
+    addMarker('search', { lat: p.lat, lon: p.lon, html: pinHtml(ico(pi.ic), pi.color, 28), key: p.key, popup: () => popupHtml(p), onClick: () => flashCard(p.key) });
+  }));
 }
 
 function drawAlong() {
-  alongGroup.clearLayers();
-  if (S.tab !== 'along') return;
-  S.along.places.forEach(p => {
+  if (S.tab !== 'along') { clearGroup('along'); return; }
+  const list = S.along.places;
+  syncGroup('along', list.map(p => p.key).join(','), () => list.forEach(p => {
     const pi = placeIcon(p);
-    const m = L.marker([p.lat, p.lon], { icon: pinIcon(ico(pi.ic), '', pi.color, 28) });
-    m.bindPopup(() => popupHtml(p));
-    m.on('click', () => flashCard(p.key));
-    markers[p.key] = m; alongGroup.addLayer(m);
-  });
+    addMarker('along', { lat: p.lat, lon: p.lon, html: pinHtml(ico(pi.ic), pi.color, 28), key: p.key, popup: () => popupHtml(p), onClick: () => flashCard(p.key) });
+  }));
 }
 
 function fitCat(cat) {
   const pts = visible(cat).slice(0, 60).map(p => [p.lat, p.lon]);
   if (S.base) pts.push([S.base.lat, S.base.lon]);
-  if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 60], paddingBottomRight: [40, 40], maxZoom: 15 });
-  else if (S.base) map.setView([S.base.lat, S.base.lon], 13);
+  if (pts.length > 1) fitPts(pts, { pad: { top: 60, bottom: 40, left: 40, right: 40 }, maxZoom: 15 });
+  else if (S.base) map.flyTo({ center: [S.base.lon, S.base.lat], zoom: 13, duration: reduceMotion() ? 0 : 900 });
 }
 
 function focusPlace(key) {
   const p = findPlace(key); if (!p) return;
-  const m = markers[key] || planMarkers[key];
-  map.setView([p.lat, p.lon], Math.max(map.getZoom(), 15), { animate: true });
-  if (m) m.openPopup();
+  map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 15), duration: reduceMotion() ? 0 : 800 });
+  showPopup(p.lon, p.lat, (markers[key]?.popup || (() => popupHtml(p)))());
 }
 function flashCard(key) {
   const el = document.querySelector(`.pcard[data-key="${key}"]`);
@@ -514,7 +598,7 @@ function activateTrip(restore) {
     S.base = { name: `${T.to.name} centre`, lat: T.to.lat, lon: T.to.lon, custom: false };
   }
   S.layers = new Set();
-  map.setView([T.to.lat, T.to.lon], 11);
+  map.flyTo({ center: [T.to.lon, T.to.lat], zoom: 10, duration: reduceMotion() ? 0 : 1200 });
   setTab(restore && S.tab !== 'search' ? S.tab : 'overview', true);
   loadCat('see');
   loadReach();
@@ -1013,7 +1097,7 @@ async function runSearch(term) {
     renderContent(); refreshMarkers();
     if (X.places.length) {
       const pts = X.places.slice(0, 30).map(p => [p.lat, p.lon]).concat([[S.base.lat, S.base.lon]]);
-      map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 60], paddingBottomRight: [40, 40], maxZoom: 15 });
+      fitPts(pts, { pad: { top: 60, bottom: 40, left: 40, right: 40 }, maxZoom: 15 });
     }
     enrichList(X.places, () => { if (S.tab === 'search' && seq === X.seq) { renderContent(); } });
   }
@@ -1314,7 +1398,7 @@ const ACT = {
     if (S.plan.items.some(i => i.key === p.key)) { toast('Already in your plan'); return; }
     S.plan.items.push({ key: p.key, day: S.plan.active, place: { key: p.key, cat: p.cat, name: p.name, lat: p.lat, lon: p.lon, sub: p.sub, tags: { website: p.tags.website, phone: p.tags.phone }, dist: p.dist, dur: p.dur, approx: p.approx } });
     toast(`Added to Day ${S.plan.active}`);
-    map.closePopup(); replan();
+    closePopup(); replan();
     if (S.tab === 'search') renderContent();
   },
   'plan-remove': el => { S.plan.items = S.plan.items.filter(i => i.key !== el.dataset.key); replan(); },

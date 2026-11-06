@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/styles.css?v=9">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/styles.css?v=13">
 </head>
 <body>
 <header class="topbar">
@@ -44,14 +44,18 @@
   <section class="mapwrap">
     <div id="map"></div>
     <div class="hud" id="hud"></div>
+    <div class="mapctl">
+      <button id="btn3d" type="button" title="Tilt the map to see 3D buildings">3D</button>
+      <button id="btnStyle" type="button" title="Change the map style"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5M2 17l10 5 10-5"/></svg><span id="styleName">Detailed</span></button>
+    </div>
     <div class="layerbar" id="layerbar"></div>
     <div class="toast" id="toast" role="status"></div>
   </section>
 </main>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="js/config.js?v=9"></script>
-<script src="js/api.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="js/config.js?v=13"></script>
+<script src="js/api.js?v=13"></script>
+<script src="js/app.js?v=13"></script>
 </body>
 </html>

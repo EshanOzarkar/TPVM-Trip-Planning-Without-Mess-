@@ -30,6 +30,8 @@ The search box above the tabs searches live as you type: places near your destin
 
 Every place type has its own icon and colour on the map and in the lists.
 
+The map is a vector map you can zoom, rotate and tilt. The **3D** button tilts it to show buildings, and **Detailed / Light / Bright** switches the map style. A small marker travels your route (a plane along the flight arc, a dot along the road).
+
 ### What is deliberately not included
 
 Features that free data can't support well were removed rather than faked. In a check on Jaipur, only 7% of restaurants carried a vegetarian tag, 1% of stays a star rating and only 3 rental shops were mapped. So there is no veg-only filter, no per-hotel price or star sort, no rental-shop list and no live fares or availability. Prices are category-level estimates and booking buttons open the provider's own site.
@@ -56,7 +58,8 @@ These are **approximate planning prices, not quotes**. Actual prices vary by dat
 
 ## Data sources (all free)
 
-- OpenStreetMap tiles, Overpass (places) with Nominatim as backup when Overpass is busy
+- [MapLibre GL JS](https://maplibre.org) with [OpenFreeMap](https://openfreemap.org) vector tiles (free, no key): smooth zoom and rotation, crisp labels, 3D buildings
+- OpenStreetMap data via Overpass (places), with Nominatim as backup when Overpass is busy
 - OSRM demo server – road distance and time (driving)
 - Wikivoyage – local food / shopping / sights text (CC BY-SA)
 - Open-Meteo – 16-day forecast
