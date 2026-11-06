@@ -1,4 +1,4 @@
-/* TPVM – application logic: state, map, views, itinerary. */
+/* TPVM – application logic: state, map, views, live search, itinerary. */
 (() => {
 'use strict';
 
@@ -32,24 +32,65 @@ function toast(msg) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 
+/* ============================== icons (inline SVG, 24px grid) ============================== */
+const IC = {
+  compass: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.8 5.41a2 2 0 0 1-1.27 1.27L7.76 16.24l1.8-5.41a2 2 0 0 1 1.27-1.27z"/>',
+  plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  bed: '<path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v9"/>',
+  car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>',
+  utensils: '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
+  bag: '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
+  pin: '<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  nav: '<polygon points="3 11 22 2 13 21 11 13 3 11"/>',
+  train: '<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14M9 21l1.5-4M15 21l-1.5-4"/><circle cx="9" cy="14" r=".8"/><circle cx="15" cy="14" r=".8"/>',
+  bus: '<rect x="4" y="3" width="16" height="14" rx="2.5"/><path d="M4 10h16M7 21v-4M17 21v-4"/><circle cx="8" cy="13.5" r=".8"/><circle cx="16" cy="13.5" r=".8"/>',
+  key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  wallet: '<path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><path d="M16 14h.01"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  up: '<path d="m5 12 7-7 7 7M12 19V5"/>',
+  down: '<path d="m19 12-7 7-7-7M12 5v14"/>',
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/>',
+  star: '<polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3 12 2"/>',
+  link: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  printer: '<path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>',
+  wand: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z"/>',
+  leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10z"/><path d="M2 21c0-3 1.9-5.4 5.1-6.8"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>',
+};
+const ico = (n, c = '') => `<svg class="ic ${c}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
+const CAT_ICON = { see: 'pin', stay: 'bed', food: 'utensils', shop: 'bag', rent: 'key', transit: 'train' };
+
 /* ============================== state ============================== */
 const TABS = [
-  { id: 'overview', ico: '🧭', label: 'Overview' },
-  { id: 'reach', ico: '✈️', label: 'Get there' },
-  { id: 'stay', ico: '🏨', label: 'Stay' },
-  { id: 'move', ico: '🚕', label: 'Get around' },
-  { id: 'eat', ico: '🍽️', label: 'Eat' },
-  { id: 'shop', ico: '🛍️', label: 'Shop' },
-  { id: 'see', ico: '📍', label: 'Explore' },
-  { id: 'plan', ico: '🗓️', label: 'Itinerary' },
+  { id: 'overview', ico: 'compass', label: 'Overview' },
+  { id: 'search', ico: 'search', label: 'Search' },
+  { id: 'reach', ico: 'plane', label: 'Get there' },
+  { id: 'stay', ico: 'bed', label: 'Stay' },
+  { id: 'move', ico: 'car', label: 'Get around' },
+  { id: 'eat', ico: 'utensils', label: 'Eat' },
+  { id: 'shop', ico: 'bag', label: 'Shop' },
+  { id: 'see', ico: 'pin', label: 'Explore' },
+  { id: 'plan', ico: 'calendar', label: 'Itinerary' },
 ];
 const TAB_CATS = { stay: ['stay'], eat: ['food'], shop: ['shop'], see: ['see'], move: ['rent', 'transit'] };
+const freshSearch = () => ({ q: '', seq: 0, loading: false, done: false, places: [], voy: [], wp: [], wide: false, errP: false, prev: 'overview' });
 
 const S = {
   trip: null, region: REGIONS.DEFAULT, base: null, tab: 'overview',
   places: {}, loading: {}, errors: {}, notes: {}, radius: {}, filters: {}, limit: {},
   layers: new Set(), plan: { days: 3, items: [], active: 1 }, routes: {},
-  reach: null, guide: null, weather: null, token: 0,
+  reach: null, guide: null, weather: null, token: 0, mode: null, search: freshSearch(),
 };
 const filt = cat => S.filters[cat] || (S.filters[cat] = { chip: '', q: '', sort: cat === 'see' ? 'notable' : 'dist', veg: false });
 
@@ -74,22 +115,26 @@ function dayLabel(d) {
 
 /* ============================== map ============================== */
 let map; const groups = {}; const markers = {}; const planMarkers = {};
-let baseGroup, planGroup, routeGroup, reachGroup, tripGroup;
+let baseGroup, planGroup, routeGroup, reachGroup, searchGroup;
 
-const pinIcon = (html, cls = '', color = '#0f766e', size = 30) => L.divIcon({
-  className: '', html: `<div class="pin ${cls}" style="--c:${color}">${html}</div>`,
+const pinIcon = (inner, cls = '', color = '#0d9488', size = 30) => L.divIcon({
+  className: '', html: `<div class="pin ${cls}" style="--c:${color}">${inner}</div>`,
   iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2 + 2],
 });
+const labelIcon = html => L.divIcon({ className: 'lbl', html, iconSize: [0, 0] });
 
 function initMap() {
-  map = L.map('map').setView([22.5, 79], 5);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+  map = L.map('map', { zoomControl: false }).setView([22.5, 79], 5);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  }).addTo(map);
   routeGroup = L.layerGroup().addTo(map);
   reachGroup = L.layerGroup().addTo(map);
   LAYER_ORDER.forEach(c => groups[c] = L.layerGroup().addTo(map));
+  searchGroup = L.layerGroup().addTo(map);
   planGroup = L.layerGroup().addTo(map);
   baseGroup = L.layerGroup().addTo(map);
-  tripGroup = L.layerGroup().addTo(map);
 }
 
 function refreshMarkers() {
@@ -98,39 +143,90 @@ function refreshMarkers() {
   LAYER_ORDER.forEach(cat => {
     const g = groups[cat]; g.clearLayers();
     if (!S.layers.has(cat)) return;
-    const C = CATEGORIES[cat];
     const list = active.includes(cat) ? visible(cat) : (S.places[cat] || []).slice().sort((a, b) => a.dist - b.dist).slice(0, 80);
     list.forEach(p => {
-      const m = L.marker([p.lat, p.lon], { icon: pinIcon(C.emoji, 'small', C.color, 24) });
+      const m = L.marker([p.lat, p.lon], { icon: pinIcon(ico(CAT_ICON[cat]), '', CATEGORIES[cat].color, 26) });
       m.bindPopup(() => popupHtml(p));
       m.on('click', () => flashCard(p.key));
       markers[p.key] = m; g.addLayer(m);
     });
   });
   baseGroup.clearLayers();
-  if (S.base) {
-    L.marker([S.base.lat, S.base.lon], { icon: pinIcon('🏠', 'base', '#14212b', 34), zIndexOffset: 800 })
-      .bindPopup(`<div class="pp"><h4>🏠 Your base</h4><div class="small muted">${esc(S.base.name)}<br>All distances &amp; times are measured from here.</div>
+  if (S.base && S.trip) {
+    L.marker([S.base.lat, S.base.lon], { icon: pinIcon(ico('home'), 'base', '#0f172a', 36), zIndexOffset: 800 })
+      .bindPopup(`<div class="pp"><h4>${ico('home')} Your base</h4><div class="small muted">${esc(S.base.name)}<br>All distances &amp; times are measured from here.</div>
         ${S.base.custom ? '<div class="pc-actions"><button class="btn sm" data-act="reset-base">Reset to city centre</button></div>' : ''}</div>`)
       .addTo(baseGroup);
   }
-  drawReach();
+  drawJourney();
+  drawSearch();
   drawPlan();
 }
 
-function drawReach() {
+/* ---------- the journey: origin -> destination ---------- */
+function greatCircle(a, b, n = 64) {
+  const p1 = rad(a.lat), l1 = rad(a.lon), p2 = rad(b.lat), l2 = rad(b.lon);
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2));
+  if (d < 1e-6) return [[a.lat, a.lon], [b.lat, b.lon]];
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+    const y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+    const z = A * Math.sin(p1) + B * Math.sin(p2);
+    pts.push([Math.atan2(z, Math.hypot(x, y)) * 180 / Math.PI, Math.atan2(y, x) * 180 / Math.PI]);
+  }
+  return pts;
+}
+
+/** Which travel option is highlighted on the map (defaults to the cheapest). */
+const selMode = () => S.mode || calcModes().find(m => m.cheapest)?.id || (S.reach?.road ? 'cab' : 'flight');
+const journeyKind = () => (selMode() === 'flight' || !S.reach?.coords?.length) ? 'air' : 'road';
+const onJourneyTab = () => S.tab === 'overview' || S.tab === 'reach';
+let jSig = '';
+
+function drawJourney() {
+  const hud = $('#hud');
+  if (!S.trip || !onJourneyTab()) { reachGroup.clearLayers(); jSig = ''; hud.classList.remove('show'); return; }
+  const { from, to } = S.trip, rc = S.reach, kind = journeyKind(), air = hav(from, to);
+  const fromN = from.city || from.name, toN = to.city || to.name;
+  const sig = [S.tab, S.trip.from.lat, S.trip.to.lat, kind, rc?.coords?.length || 0, rc?.airports.from.length, rc?.airports.to.length, rc?.stations.length].join('|');
+  const timeAir = rc ? air / S.region.flight.speed * 60 + S.region.flight.overhead : null;
+  const text = kind === 'road' && rc?.road ? `${fmtKm(rc.road)} · ${fmtMin(rc.roadTime)} by road` : `${fmtKm(air)} · ~${fmtMin(timeAir ?? air / 780 * 60 + 180)} by air`;
+  hud.innerHTML = `<span>${esc(fromN)} → ${esc(toN)}</span><b>${text}</b>`;
+  hud.classList.add('show');
+  if (sig === jSig) return;
+  jSig = sig;
   reachGroup.clearLayers();
-  if (S.tab !== 'reach' || !S.trip) return;
-  const { from, to } = S.trip;
-  L.polyline([[from.lat, from.lon], [to.lat, to.lon]], { color: '#0f766e', weight: 3, dashArray: '8 8', opacity: .8 }).addTo(reachGroup);
-  L.marker([from.lat, from.lon], { icon: pinIcon('A', '', '#0f766e', 32) }).bindPopup(`<b>${esc(from.label)}</b><br><span class="small muted">Origin</span>`).addTo(reachGroup);
-  L.marker([to.lat, to.lon], { icon: pinIcon('B', '', '#e11d48', 32) }).bindPopup(`<b>${esc(to.label)}</b><br><span class="small muted">Destination</span>`).addTo(reachGroup);
-  (S.reach?.airports.from || []).concat(S.reach?.airports.to || []).forEach(a =>
-    L.marker([a.lat, a.lon], { icon: pinIcon('✈', 'small', '#475569', 24) })
-      .bindPopup(`<b>${esc(a.name)}</b>${a.iata ? ` (${esc(a.iata)})` : ''}<br><span class="small muted">${fmtKm(a.d)} from city centre</span>`).addTo(reachGroup));
-  (S.reach?.stations || []).forEach(a =>
-    L.marker([a.lat, a.lon], { icon: pinIcon('🚉', 'small', '#475569', 24) })
-      .bindPopup(`<b>${esc(a.name)}</b><br><span class="small muted">${esc(pretty(a.sub))} · ${fmtKm(a.d)} from centre</span>`).addTo(reachGroup));
+
+  const arc = greatCircle(from, to), showArc = air >= 150;
+  if (showArc) L.polyline(arc, { color: '#6366f1', weight: kind === 'air' ? 4 : 2.5, opacity: kind === 'air' ? .95 : .4, lineCap: 'round', className: kind === 'air' ? 'flow' : '', interactive: false }).addTo(reachGroup);
+  if (rc?.coords?.length) {
+    L.polyline(rc.coords, { color: '#fff', weight: kind === 'road' ? 10 : 7, opacity: .9, interactive: false }).addTo(reachGroup);
+    L.polyline(rc.coords, { color: kind === 'road' ? '#0d9488' : '#94a3b8', weight: kind === 'road' ? 5 : 3.5, opacity: kind === 'road' ? 1 : .8, interactive: false }).addTo(reachGroup);
+  } else if (!showArc) {
+    L.polyline([[from.lat, from.lon], [to.lat, to.lon]], { color: '#0d9488', weight: 4, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(reachGroup);
+  }
+  const mid = kind === 'road' && rc?.coords?.length ? rc.coords[Math.floor(rc.coords.length / 2)] : arc[Math.floor(arc.length / 2)];
+  L.marker(mid, { icon: labelIcon(`<div class="routelabel">${text}</div>`), interactive: false, zIndexOffset: 400 }).addTo(reachGroup);
+  const end = (p, letter, color, label) => L.marker([p.lat, p.lon], { icon: labelIcon(`<div class="endpin" style="--c:${color}"><i>${letter}</i>${esc(label)}</div>`), zIndexOffset: 900 })
+    .bindPopup(`<b>${esc(p.label)}</b>`).addTo(reachGroup);
+  end(from, 'A', '#0d9488', fromN); end(to, 'B', '#e11d48', toN);
+  if (S.tab === 'reach') {
+    (rc?.airports.from || []).concat(rc?.airports.to || []).forEach(a =>
+      L.marker([a.lat, a.lon], { icon: pinIcon(ico('plane'), '', '#475569', 26) })
+        .bindPopup(`<b>${esc(a.name)}</b>${a.iata ? ` (${esc(a.iata)})` : ''}<br><span class="small muted">${fmtKm(a.d)} from city centre</span>`).addTo(reachGroup));
+    (rc?.stations || []).forEach(a =>
+      L.marker([a.lat, a.lon], { icon: pinIcon(ico(a.sub === 'bus station' ? 'bus' : 'train'), '', '#475569', 26) })
+        .bindPopup(`<b>${esc(a.name)}</b><br><span class="small muted">${esc(pretty(a.sub))} · ${fmtKm(a.d)} from centre</span>`).addTo(reachGroup));
+  }
+}
+
+function fitJourney() {
+  if (!S.trip || !map) return;
+  const { from, to } = S.trip, rc = S.reach;
+  const pts = journeyKind() === 'road' && rc?.coords?.length ? rc.coords : [[from.lat, from.lon], [to.lat, to.lon]];
+  map.fitBounds(L.latLngBounds(pts).extend([from.lat, from.lon]).extend([to.lat, to.lon]), { paddingTopLeft: [50, 90], paddingBottomRight: [50, 50], maxZoom: 11 });
 }
 
 function drawPlan() {
@@ -139,20 +235,34 @@ function drawPlan() {
   for (let d = 1; d <= S.plan.days; d++) {
     const color = DAY_COLORS[(d - 1) % DAY_COLORS.length];
     const items = S.plan.items.filter(i => i.day === d);
+    const r = S.routes[d];
+    if (r?.coords?.length) {
+      L.polyline(r.coords, { color: '#fff', weight: 9, opacity: .9, interactive: false }).addTo(routeGroup);
+      L.polyline(r.coords, { color, weight: 5, opacity: .95, interactive: false }).addTo(routeGroup);
+    }
     items.forEach((it, idx) => {
-      const m = L.marker([it.place.lat, it.place.lon], { icon: pinIcon(idx + 1, '', color, 28), zIndexOffset: 500 });
+      const m = L.marker([it.place.lat, it.place.lon], { icon: pinIcon(idx + 1, '', color, 30), zIndexOffset: 500 });
       m.bindPopup(() => popupHtml(findPlace(it.key) || it.place));
       planMarkers[it.key] = m; planGroup.addLayer(m);
     });
-    const r = S.routes[d];
-    if (r?.coords?.length) L.polyline(r.coords, { color, weight: 5, opacity: .8 }).addTo(routeGroup);
   }
+}
+
+function drawSearch() {
+  searchGroup.clearLayers();
+  if (S.tab !== 'search') return;
+  S.search.places.forEach(p => {
+    const m = L.marker([p.lat, p.lon], { icon: pinIcon(ico(CAT_ICON[p.cat] || 'pin'), '', CATEGORIES[p.cat]?.color || '#0d9488', 28) });
+    m.bindPopup(() => popupHtml(p));
+    m.on('click', () => flashCard(p.key));
+    markers[p.key] = m; searchGroup.addLayer(m);
+  });
 }
 
 function fitCat(cat) {
   const pts = visible(cat).slice(0, 60).map(p => [p.lat, p.lon]);
   if (S.base) pts.push([S.base.lat, S.base.lon]);
-  if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 15 });
+  if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 60], paddingBottomRight: [40, 40], maxZoom: 15 });
   else if (S.base) map.setView([S.base.lat, S.base.lon], 13);
 }
 
@@ -233,19 +343,20 @@ async function loadCat(cat, force) {
 }
 
 const bKey = () => S.base ? S.base.lat + ',' + S.base.lon : '';
-async function enrich(cat) {
+async function enrichList(list, done) {
   const token = S.token, key = bKey();
-  const list = (S.places[cat] || []).slice().sort((a, b) => a.air - b.air).slice(0, 180);
-  for (let i = 0; i < list.length; i += 90) {
-    const chunk = list.slice(i, i + 90);
+  const sorted = list.slice().sort((a, b) => a.air - b.air).slice(0, 180);
+  for (let i = 0; i < sorted.length; i += 90) {
+    const chunk = sorted.slice(i, i + 90);
     try {
       const res = await API.osrmTable(S.base, chunk);
       if (token !== S.token || key !== bKey()) return;
       chunk.forEach((p, j) => { const r = res[j]; if (r && r.dist != null) { p.dist = r.dist; p.dur = r.dur; p.approx = false; } });
     } catch { return; }
-    uiUpdate(cat);
+    done();
   }
 }
+const enrich = cat => enrichList(S.places[cat] || [], () => uiUpdate(cat));
 
 function visible(cat) {
   const F = filt(cat);
@@ -315,20 +426,18 @@ function regionFor(trip) { return trip.to.cc === 'IN' ? REGIONS.IN : REGIONS.DEF
 function activateTrip(restore) {
   const T = S.trip;
   S.region = regionFor(T);
+  S.token++;
+  S.mode = null; S.search = freshSearch(); jSig = '';
+  $('#gsearch').value = ''; $('#gclear').hidden = true;
   if (!restore) {
-    S.token++;
     S.places = {}; S.loading = {}; S.errors = {}; S.notes = {}; S.filters = {}; S.limit = {}; S.radius = {};
     S.reach = null; S.guide = null; S.weather = null; S.routes = {};
     S.plan = { days: nights() + 1, items: [], active: 1 };
     S.base = { name: `${T.to.name} centre`, lat: T.to.lat, lon: T.to.lon, custom: false };
-    S.layers = new Set(['see']);
-  } else {
-    S.token++;
-    S.layers = new Set(['see']);
   }
-  tripGroup.clearLayers();
-  map.setView([T.to.lat, T.to.lon], 12);
-  setTab(restore ? S.tab : 'overview', true);
+  S.layers = new Set();
+  map.setView([T.to.lat, T.to.lon], 11);
+  setTab(restore && S.tab !== 'search' ? S.tab : 'overview', true);
   loadCat('see');
   loadReach();
   loadGuide();
@@ -339,9 +448,14 @@ function activateTrip(restore) {
 
 async function loadReach() {
   const token = S.token, { from, to } = S.trip;
-  const R = S.reach = { air: hav(from, to), road: null, roadTime: null, airports: { from: [], to: [] }, stations: [], loading: true };
+  const R = S.reach = { air: hav(from, to), road: null, roadTime: null, coords: null, airports: { from: [], to: [] }, stations: [], loading: true };
   uiUpdate('reach');
-  try { const r = await API.osrmRoute([from, to], false); if (token === S.token) { R.road = r.dist; R.roadTime = r.dur; } } catch { /* overseas / no road */ }
+  try {
+    const r = await API.osrmRoute([from, to], true);
+    if (token === S.token) { R.road = r.dist; R.roadTime = r.dur; R.coords = r.coords; }
+  } catch { /* overseas / no road */ }
+  if (token !== S.token) return;
+  if (onJourneyTab()) { uiUpdate('reach'); fitJourney(); }
   const ap = (c, r) => API.airports(c.lat, c.lon, r)
     .catch(() => API.nominatimPlaces(['airport'], c.lat, c.lon, r).then(l => l.filter(e => /airport|airfield|aerodrome/i.test(e.tags.name))))
     .then(els => els.map(e => ({
@@ -406,28 +520,28 @@ function calcModes() {
   const perPerson = (a, b) => `${range(a / pax, b / pax)} per person, all-in`;
   if (air >= R.flight.minKm) {
     const f = R.flight, one = f.base + f.perKm * air;
-    add({ id: 'flight', ico: '✈️', name: 'Flight', time: air / f.speed * 60 + f.overhead, kind: 'flight', lo: one * f.lo, hi: one * f.hi, units: pax,
+    add({ id: 'flight', ico: 'plane', name: 'Flight', time: air / f.speed * 60 + f.overhead, kind: 'flight', lo: one * f.lo, hi: one * f.hi, units: pax,
       unit: 'per person, one-way', per: perPerson,
       note: `Door-to-door includes ~${f.overhead / 60} h for airport transfers, check-in & security. Fares swing a lot with booking date.` });
   }
   if (road && domestic) {
     const { train: tr, bus, cab, selfDrive: sd } = R;
     if (road >= tr.minKm && road <= tr.maxKm) {
-      add({ id: 'train', ico: '🚆', name: 'Train', time: road / tr.speed * 60 + 45, kind: 'train', lo: tr.base + tr.lo * road, hi: tr.base + tr.hi * road, units: pax,
+      add({ id: 'train', ico: 'train', name: 'Train', time: road / tr.speed * 60 + 45, kind: 'train', lo: tr.base + tr.lo * road, hi: tr.base + tr.hi * road, units: pax,
         ctx: { lo: { cls: 'sl' }, hi: { cls: 'ac' }, mid: { cls: 'ac' } }, unit: 'per person, AC class', per: perPerson,
-        note: 'Low end is a basic sleeper-type class, high end a premium AC class. Check station-to-hotel transfer time.' });
+        note: 'Low end is a basic sleeper-type class, high end a premium AC class. Check station-to-hotel transfer time. The map shows the road corridor, not the rail line.' });
     }
     if (road >= bus.minKm && road <= bus.maxKm) {
-      add({ id: 'bus', ico: '🚌', name: 'Bus', time: road / bus.speed * 60 + 20, kind: 'bus', lo: bus.base + bus.lo * road, hi: bus.base + bus.hi * road, units: pax,
+      add({ id: 'bus', ico: 'bus', name: 'Bus', time: road / bus.speed * 60 + 20, kind: 'bus', lo: bus.base + bus.lo * road, hi: bus.base + bus.hi * road, units: pax,
         unit: 'per person', per: perPerson, note: 'Sleeper & AC coaches run overnight on many routes.' });
     }
     const cars = Math.ceil(pax / cab.seats), cost = Math.max(cab.min, cab.perKm * road);
-    add({ id: 'cab', ico: '🚕', name: 'Cab (one-way drop)', time: road / cab.speed * 60 + 10, kind: 'cab', lo: cost * .9, hi: cost * 1.35, units: cars,
+    add({ id: 'cab', ico: 'car', name: 'Cab (one-way drop)', time: road / cab.speed * 60 + 10, kind: 'cab', lo: cost * .9, hi: cost * 1.35, units: cars,
       ctx: { km: road, interstate }, unit: 'per car', per: (a, b) => `${range(a, b)} for ${cars} car${cars > 1 ? 's' : ''}, all-in`,
       note: `Door-to-door and flexible stops. Tolls${interstate ? ' and an inter-state permit' : ''} are included; parking and night charges may be extra.` });
     if (road <= sd.maxKm) {
       const days = nights() + 1;
-      add({ id: 'self', ico: '🚗', name: 'Self-drive (round trip)', time: road / cab.speed * 60, kind: 'rental', lo: sd.perDay * days * .85, hi: sd.perDay * days * 1.4, units: cars, roundTrip: true,
+      add({ id: 'self', ico: 'key', name: 'Self-drive (round trip)', time: road / cab.speed * 60, kind: 'rental', lo: sd.perDay * days * .85, hi: sd.perDay * days * 1.4, units: cars, roundTrip: true,
         ctx: { km: road }, unit: `per car, ${days} days`, per: (a, b) => `${range(a, b)} for the whole trip, all-in`,
         note: `Rental for ${days} days plus GST, fuel and tolls both ways; you keep the car at the destination. A refundable deposit is usually held on top.` });
     }
@@ -442,16 +556,16 @@ function calcBudget() {
   const T = S.trip, R = S.region, pax = T.travelers, tier = T.tier, n = nights(), days = n + 1;
   const cheapest = calcModes().find(m => m.cheapest);
   const rooms = Math.ceil(pax / 2);
-  const row = (k, kind, lo, hi, sub, mult = 1) => ({
-    k, sub, lo: priceOf(kind, lo).total * mult, hi: priceOf(kind, hi).total * mult, tax: priceOf(kind, (lo + hi) / 2).tax * mult,
+  const row = (k, ic, kind, lo, hi, sub, mult = 1) => ({
+    k, ic, sub, lo: priceOf(kind, lo).total * mult, hi: priceOf(kind, hi).total * mult, tax: priceOf(kind, (lo + hi) / 2).tax * mult,
   });
   const trips = cheapest ? (cheapest.roundTrip ? 1 : 2) : 0;
   const rows = [
-    { k: '✈️ Getting there & back', sub: cheapest?.name, lo: (cheapest?.lo || 0) * trips, hi: (cheapest?.hi || 0) * trips, tax: (cheapest?.taxMid || 0) * trips },
-    row('🏨 Stay', 'stay', R.stay.hotel * tier * .7, R.stay.hotel * tier * 1.4, `${rooms} room${rooms > 1 ? 's' : ''} × ${n} night${n > 1 ? 's' : ''}, incl. room taxes`, n * rooms),
-    row('🍽️ Food', 'food', R.food * tier * pax * days * .8, R.food * tier * pax * days * 1.25, 'incl. GST & service charge'),
-    row('🚕 Local transport', 'ride', R.local * Math.ceil(pax / 3) * days * .8, R.local * Math.ceil(pax / 3) * days * 1.4 * tier, 'cabs & autos, incl. tax'),
-    row('🎟️ Sights & shopping', 'act', R.act * pax * days * tier * .7, R.act * pax * days * tier * 1.5, 'entry fees incl. tax'),
+    { k: 'Getting there & back', ic: 'plane', sub: cheapest?.name, lo: (cheapest?.lo || 0) * trips, hi: (cheapest?.hi || 0) * trips, tax: (cheapest?.taxMid || 0) * trips },
+    row('Stay', 'bed', 'stay', R.stay.hotel * tier * .7, R.stay.hotel * tier * 1.4, `${rooms} room${rooms > 1 ? 's' : ''} × ${n} night${n > 1 ? 's' : ''}, incl. room taxes`, n * rooms),
+    row('Food', 'utensils', 'food', R.food * tier * pax * days * .8, R.food * tier * pax * days * 1.25, 'incl. GST & service charge'),
+    row('Local transport', 'car', 'ride', R.local * Math.ceil(pax / 3) * days * .8, R.local * Math.ceil(pax / 3) * days * 1.4 * tier, 'cabs & autos, incl. tax'),
+    row('Sights & shopping', 'bag', 'act', R.act * pax * days * tier * .7, R.act * pax * days * tier * 1.5, 'entry fees incl. tax'),
   ];
   const lo = rows.reduce((s, r) => s + r.lo, 0), hi = rows.reduce((s, r) => s + r.hi, 0), tax = rows.reduce((s, r) => s + r.tax, 0);
   return { rows, lo, hi, tax };
@@ -467,42 +581,43 @@ function uiUpdate(cat) {
 
 function renderTabs() {
   $('#tabs').innerHTML = TABS.map(t =>
-    `<button class="tab ${S.tab === t.id ? 'on' : ''}" role="tab" data-act="tab" data-tab="${t.id}"><span class="i">${t.ico}</span>${t.label}</button>`).join('');
+    `<button class="tab ${S.tab === t.id ? 'on' : ''}" role="tab" data-act="tab" data-tab="${t.id}">${ico(t.ico)}${t.label}</button>`).join('');
+  $('#tabs .on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function renderLayerBar() {
   $('#layerbar').innerHTML = LAYER_ORDER.map(cat => {
     const C = CATEGORIES[cat], n = S.places[cat]?.length;
-    return `<button class="lchip ${S.layers.has(cat) ? 'on' : ''}" data-act="layer" data-cat="${cat}">${C.emoji} ${C.label}${S.loading[cat] ? ' <small>…</small>' : n != null ? ` <small>${n}</small>` : ''}</button>`;
+    return `<button class="lchip ${S.layers.has(cat) ? 'on' : ''}" data-act="layer" data-cat="${cat}">${ico(CAT_ICON[cat], 'xs')}${C.label}${S.loading[cat] ? ' <small>…</small>' : n != null ? ` <small>${n}</small>` : ''}</button>`;
   }).join('');
 }
 
 function setTab(tab, silent) {
   S.tab = tab;
+  jSig = '';
   renderTabs();
   const cats = TAB_CATS[tab] || [];
-  S.layers = new Set(tab === 'overview' ? ['see'] : cats);
+  S.layers = new Set(cats);
   cats.forEach(c => S.places[c] ? fitCat(c) : loadCat(c));
-  if (tab === 'reach' && S.trip) {
-    map.fitBounds(L.latLngBounds([[S.trip.from.lat, S.trip.from.lon], [S.trip.to.lat, S.trip.to.lon]]), { padding: [60, 60], maxZoom: 12 });
-  }
-  if (tab === 'plan') for (let d = 1; d <= S.plan.days; d++) ensureRoute(d);
   renderLayerBar(); renderContent(); refreshMarkers();
+  if (onJourneyTab() && S.trip) fitJourney();
+  if (tab === 'plan') for (let d = 1; d <= S.plan.days; d++) ensureRoute(d);
   $('#content').scrollTop = 0;
   if (!silent) save();
 }
 
 function renderContent() {
-  const V = { overview: viewOverview, reach: viewReach, stay: () => viewCat('stay'), move: viewMove, eat: () => viewCat('food'), shop: () => viewCat('shop'), see: () => viewCat('see'), plan: viewPlan };
+  const V = { overview: viewOverview, search: viewSearch, reach: viewReach, stay: () => viewCat('stay'), move: viewMove, eat: () => viewCat('food'), shop: () => viewCat('shop'), see: () => viewCat('see'), plan: viewPlan };
   const st = $('#content').scrollTop;
   $('#content').innerHTML = (V[S.tab] || viewOverview)();
   $('#content').scrollTop = st;
   (TAB_CATS[S.tab] || []).forEach(refreshList);
 }
 
-const needTrip = () => `<div class="empty"><div style="font-size:42px">🗺️</div><p><b>Plan a trip first</b></p><p>Enter where you're travelling from and to in the bar above, then hit <b>Plan trip</b>.</p></div>`;
+const needTrip = () => `<div class="empty">${ico('compass')}<p><b>Plan a trip first</b></p><p>Enter where you're travelling from and to in the bar above, then hit <b>Plan trip</b>.</p></div>`;
 const spinner = t => `<div class="muted"><span class="spinner"></span>${t}</div>`;
-const linkBtns = (arr, cls = 'btn sm') => arr.map(([n, u]) => `<a class="${cls}" target="_blank" rel="noopener" href="${esc(u)}">${esc(n)} ↗</a>`).join('');
+const sec = (ic, title, extra = '') => `<h3>${ico(ic, 'xs')}${title}${extra}</h3>`;
+const linkBtns = (arr, cls = 'btn sm') => arr.map(([n, u]) => `<a class="${cls}" target="_blank" rel="noopener" href="${esc(u)}">${esc(n)} ${ico('link', 'xs')}</a>`).join('');
 
 function excerpt(text, max = 1400) {
   if (!text) return '';
@@ -523,54 +638,48 @@ function guideBlock(title, keys, max) {
 function viewOverview() {
   if (!S.trip) return welcome();
   const T = S.trip, rc = S.reach, n = nights();
-  const wx = weatherStrip();
   const b = calcBudget();
   const max = Math.max(...b.rows.map(r => r.hi)) || 1;
+  const fromN = T.from.city || T.from.name, toN = T.to.city || T.to.name;
+  const nav = [['search', 'search', 'Live search', 'Places, tips and web results'], ['reach', 'plane', 'Get there', 'Flight, train, bus or cab'], ['stay', 'bed', 'Stay', 'Hotels, homestays, Airbnb'], ['move', 'car', 'Get around', 'Cabs, rentals, metro'], ['eat', 'utensils', 'Eat', 'Restaurants and cafés'], ['see', 'pin', 'Explore', 'Sights on the map']];
   return `
-  <div class="box hero">
-    <h2>${esc(T.from.name)} → ${esc(T.to.name)}</h2>
-    <div class="muted">${esc(T.to.label)}<br>${T.start ? esc(dayLabel(1)) : ''} · ${n} night${n > 1 ? 's' : ''} · ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}</div>
-    <div class="grid2" style="margin-top:10px">
-      <div class="stat"><b>${rc ? fmtKm(rc.air) : '…'}</b><span>as the crow flies</span></div>
-      <div class="stat"><b>${rc ? (rc.road ? fmtKm(rc.road) + ' · ' + fmtMin(rc.roadTime) : 'No road route') : '…'}</b><span>by road</span></div>
+  <div class="hero">
+    <div class="hero-route"><div><small>From</small><b>${esc(fromN)}</b></div><div class="hero-line">${ico('plane')}</div><div style="text-align:right"><small>To</small><b>${esc(toN)}</b></div></div>
+    <div class="hero-meta">${esc(T.to.label)}<br>${T.start ? esc(dayLabel(1)) + ' · ' : ''}${n} night${n > 1 ? 's' : ''} · ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}</div>
+    <div class="pills">
+      <span class="pill">${ico('nav', 'xs')}${rc ? (rc.road ? fmtKm(rc.road) + ' by road' : 'no road route') : '…'}</span>
+      <span class="pill">${ico('clock', 'xs')}${rc ? (rc.road ? fmtMin(rc.roadTime) + ' drive' : '–') : '…'}</span>
+      <span class="pill">${ico('plane', 'xs')}${rc ? fmtKm(rc.air) + ' by air' : '…'}</span>
     </div>
   </div>
-  ${wx}
-  <h3>💰 Rough trip budget</h3>
+  ${weatherStrip()}
+  ${sec('wallet', 'Rough trip budget')}
   <div class="box">
-    ${rc ? `<div class="bud">${b.rows.map(r => `<div>${r.k}<div class="small muted">${esc(r.sub || '')}</div></div><b>${range(r.lo, r.hi)}</b><div class="bar"><i style="width:${Math.max(4, r.hi / max * 100)}%"></i></div>`).join('')}
-      <div class="tot">Total estimate (all taxes included)</div><div class="tot">${range(b.lo, b.hi)}</div>
+    ${rc ? `<div class="bud">${b.rows.map(r => `<div class="bl">${ico(r.ic)}<div><b>${r.k}</b><div class="small muted">${esc(r.sub || '')}</div></div></div><b>${range(r.lo, r.hi)}</b><div class="bar"><i style="width:${Math.max(4, r.hi / max * 100)}%"></i></div>`).join('')}
+      <div class="tot">Total (all taxes included)</div><div class="tot">${range(b.lo, b.hi)}</div>
       <div class="small muted">of which taxes, fees, fuel &amp; tolls ≈</div><div class="small muted">${money(b.tax)}</div></div>
-      <p class="small muted" style="margin-top:8px">For ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}, ${['budget', 'comfort', 'premium'][[.6, 1, 2].indexOf(T.tier)] || 'comfort'} style. Change travellers, dates or style in the top bar. Open <b>Get there</b> and <b>Stay</b> for itemised taxes.</p>
+      <p class="small muted" style="margin-top:10px">For ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}, ${['budget', 'comfort', 'premium'][[.6, 1, 2].indexOf(T.tier)] || 'comfort'} style. Change travellers, dates or style in the top bar. Open <b>Get there</b> and <b>Stay</b> for itemised taxes.</p>
       <p class="note">${DISCLAIMER}</p>`
       : spinner('Working out routes…')}
   </div>
-  <h3>🚀 Plan it</h3>
-  <div class="grid2">
-    ${[['reach', '✈️', 'Compare how to get there'], ['stay', '🏨', 'Hotels, homestays & Airbnb'], ['move', '🚕', 'Cabs, rentals & transit'], ['eat', '🍽️', 'Where to eat nearby'], ['shop', '🛍️', 'Markets & shopping'], ['see', '📍', 'Spots on the map']]
-      .map(([t, i, l]) => `<button class="btn" data-act="tab" data-tab="${t}">${i} ${l}</button>`).join('')}
-  </div>
-  ${S.guide ? `<h3>📖 About ${esc(T.to.name)}</h3>${guideBlock('Understand the destination', ['understand'], 1200) || `<div class="box"><div class="excerpt">${excerpt(S.guide.intro, 900)}</div></div>`}` : ''}
-  <h3>💡 Tips</h3>
+  ${sec('compass', 'Plan it')}
+  <div class="navgrid">${nav.map(([t, i, l, s]) => `<button class="navcard" data-act="tab" data-tab="${t}">${ico(i)}<b>${l}</b><small>${s}</small></button>`).join('')}</div>
+  ${S.guide ? sec('globe', `About ${esc(toN)}`) + (guideBlock('Understand the destination', ['understand'], 1200) || `<div class="box"><div class="excerpt">${excerpt(S.guide.intro, 900)}</div></div>`) : ''}
+  ${sec('info', 'Tips')}
   <div class="box"><ul style="margin:0;padding-left:18px">${S.region.tips.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
 }
 
 function welcome() {
+  const feats = [['plane', 'Every way to get there', 'Flight, train, bus and cab compared, with the real route on the map.'], ['bed', 'Stays, any budget', 'Hotels, guest houses and Airbnb-style stays with all-in prices.'], ['search', 'Live search', 'Search places, tips and the web without leaving the map.'], ['calendar', 'Day-by-day plan', 'Drop spots into an itinerary and see every leg\'s distance and time.']];
   return `
-  <div class="box hero">
+  <div class="hero">
     <h2>Plan the whole trip in one place</h2>
-    <p class="muted">Pick where you're going and see everything on a live map – with road distance &amp; travel time from your base to every spot.</p>
+    <p>Pick where you're going and see the journey, the stays, the food and the sights on one live map, with road distance, travel time and prices that include taxes.</p>
   </div>
-  <div class="box"><ul style="margin:0;padding-left:18px;line-height:1.9">
-    <li>✈️🚆🚌🚕 Compare flight, train, bus &amp; cab for your route</li>
-    <li>🏨 Hotels, guest houses &amp; Airbnb-style stays with price estimates</li>
-    <li>🚗 Local rentals, cabs, metro &amp; stations</li>
-    <li>🍽️ Restaurants &amp; cafés (veg filter) · 🛍️ shopping places</li>
-    <li>📍 Sights with distance &amp; drive time · 🗓️ day-by-day route planner</li>
-  </ul></div>
-  <h3>Try a sample trip</h3>
+  <div class="navgrid" style="margin-bottom:6px">${feats.map(([i, t, s]) => `<div class="navcard" style="cursor:default">${ico(i)}<b>${t}</b><small>${s}</small></div>`).join('')}</div>
+  ${sec('compass', 'Try a sample trip')}
   <div class="chips">${SAMPLE_TRIPS.map(([a, b], i) => `<button class="chip" data-act="sample" data-i="${i}">${esc(a)} → ${esc(b)}</button>`).join('')}</div>
-  <p class="note">Data: OpenStreetMap (places &amp; maps), OSRM (road routing), Wikivoyage, Open-Meteo. Fares &amp; room prices are planning estimates; booking buttons open the provider's own site for live prices.</p>`;
+  <p class="note">Data: OpenStreetMap, OSRM, Wikivoyage, Wikipedia and Open-Meteo. Fares &amp; room prices are planning estimates; booking buttons open the provider's own site for real prices.</p>`;
 }
 
 const WX = c => c === 0 ? '☀️' : c <= 2 ? '🌤️' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 57 ? '🌦️' : c <= 67 ? '🌧️' : c <= 77 ? '❄️' : c <= 82 ? '🌦️' : '⛈️';
@@ -581,7 +690,7 @@ function weatherStrip() {
   let days = S.weather.filter(d => d.date >= s && d.date <= e);
   let cap = 'Forecast for your dates';
   if (!days.length) { days = S.weather.slice(0, 7); cap = 'Trip dates are beyond the 16-day forecast – showing the next 7 days'; }
-  return `<h3>🌦️ Weather</h3><div class="wx">${days.map(d => `<div>${new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}<b>${WX(d.code)}</b>${Math.round(d.max)}°/${Math.round(d.min)}°<br>💧${d.rain ?? 0}%</div>`).join('')}</div><div class="small muted">${cap}</div>`;
+  return `${sec('sun', 'Weather')}<div class="wx">${days.map(d => `<div>${new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}<b>${WX(d.code)}</b>${Math.round(d.max)}°/${Math.round(d.min)}°<br>${d.rain ?? 0}% rain</div>`).join('')}</div><div class="small muted" style="margin-top:4px">${cap}</div>`;
 }
 
 /* ---------- get there ---------- */
@@ -589,7 +698,7 @@ function viewReach() {
   if (!S.trip) return needTrip();
   const T = S.trip, rc = S.reach, R = S.region;
   if (!rc) return spinner('Loading…');
-  const modes = calcModes();
+  const modes = calcModes(), sel = selMode();
   const date = T.start || '';
   const ap = rc.airports, fi = ap.from[0]?.iata, ti = ap.to[0]?.iata;
   const fromN = T.from.city || T.from.name, toN = T.to.city || T.to.name;
@@ -605,26 +714,27 @@ function viewReach() {
     cab: [...R.links.cab, ['Google Maps', gmaps('driving')]],
     self: [...R.links.rent, ['Google Maps', gmaps('driving')]],
   };
-  const card = m => `<div class="box mode"><div class="ico">${m.ico}</div><div>
+  const card = m => `<div class="box mode ${m.id === sel ? 'sel' : ''}" data-act="mode" data-id="${m.id}" title="Click to show this journey on the map"><div class="mi">${ico(m.ico)}</div><div>
     <div class="row between"><h4>${m.name}</h4><span class="small"><b>${fmtMin(m.time)}</b></span></div>
     <div class="price">${m.per}</div>
-    <div class="row" style="margin:4px 0">${m.fastest ? '<span class="tag good">⚡ Fastest</span>' : ''}${m.cheapest ? '<span class="tag good">💰 Cheapest</span>' : ''}${m.roundTrip ? '' : `<span class="tag">Group total ${range(m.lo, m.hi)} one-way</span>`}<span class="tag good">all taxes &amp; fees included</span></div>
+    <div class="row" style="margin:5px 0">${m.fastest ? `<span class="tag good">${ico('clock', 'xs')}Fastest</span>` : ''}${m.cheapest ? `<span class="tag good">${ico('wallet', 'xs')}Cheapest</span>` : ''}${m.roundTrip ? '' : `<span class="tag">Group total ${range(m.lo, m.hi)} one-way</span>`}<span class="tag good">all taxes &amp; fees included</span></div>
     <div class="small muted">${m.note}</div>
     ${breakdownHtml(m.breakdown, m.unit)}
     <div class="link-row">${linkBtns(links[m.id] || [])}</div></div></div>`;
-  const apList = (arr, label) => arr.length ? `<div class="small"><b>${label}</b></div>${arr.map(a => `<div class="row between small" style="padding:2px 0"><span>✈ ${esc(a.name)} ${a.iata ? `<span class="tag">${esc(a.iata)}</span>` : ''}</span><span class="muted">${fmtKm(a.d)} from centre</span></div>`).join('')}` : '';
+  const apList = (arr, label) => arr.length ? `<div class="small"><b>${label}</b></div>${arr.map(a => `<div class="row between small" style="padding:3px 0"><span>${ico('plane', 'xs')} ${esc(a.name)} ${a.iata ? `<span class="tag">${esc(a.iata)}</span>` : ''}</span><span class="muted">${fmtKm(a.d)} from centre</span></div>`).join('')}` : '';
   return `
-  <div class="box hero"><h2>${esc(fromN)} → ${esc(toN)}</h2>
-    <div class="muted">${fmtKm(rc.air)} straight-line${rc.road ? ` · ${fmtKm(rc.road)} by road (${fmtMin(rc.roadTime)} driving)` : ' · no road connection found'} · ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}${date ? ' · ' + esc(dayLabel(1)) : ''}</div></div>
+  <div class="hero"><div class="hero-route"><div><small>From</small><b>${esc(fromN)}</b></div><div class="hero-line">${ico('plane')}</div><div style="text-align:right"><small>To</small><b>${esc(toN)}</b></div></div>
+    <div class="hero-meta">${fmtKm(rc.air)} straight-line${rc.road ? ` · ${fmtKm(rc.road)} by road (${fmtMin(rc.roadTime)} driving)` : ' · no road connection found'} · ${T.travelers} traveller${T.travelers > 1 ? 's' : ''}${date ? ' · ' + esc(dayLabel(1)) : ''}</div></div>
   ${rc.loading && !modes.length ? spinner('Comparing options…') : ''}
+  ${modes.length ? '<p class="small muted" style="margin:0 0 8px">Tap an option to see its journey on the map.</p>' : ''}
   ${modes.map(card).join('') || (rc.loading ? '' : '<div class="box">For this distance, check the multi-modal planner below.</div>')}
-  <div class="link-row"><a class="btn" target="_blank" rel="noopener" href="${r2r}">🌐 All options on Rome2Rio ↗</a></div>
-  <h3>🛬 Airports &amp; stations</h3>
+  <div class="link-row" style="margin-top:0"><a class="btn" target="_blank" rel="noopener" href="${r2r}">${ico('globe', 'xs')} All options on Rome2Rio ${ico('link', 'xs')}</a></div>
+  ${sec('plane', 'Airports &amp; stations')}
   <div class="box">
     ${rc.loading && !ap.from.length ? spinner('Finding airports…') : ''}
     ${apList(ap.from, `Near ${fromN}`)}${apList(ap.to, `Near ${toN}`)}
     ${!rc.loading && !ap.from.length && !ap.to.length ? '<div class="small muted">No commercial airports found within 100 km of either city.</div>' : ''}
-    ${rc.stations.length ? `<div class="small" style="margin-top:8px"><b>Stations near ${esc(toN)}</b></div>${rc.stations.map(a => `<div class="row between small" style="padding:2px 0"><span>${a.sub === 'bus station' ? '🚌' : '🚉'} ${esc(a.name)}${a.code ? ` <span class="tag">${esc(a.code)}</span>` : ''}</span><span class="muted">${fmtKm(a.d)}</span></div>`).join('')}` : ''}
+    ${rc.stations.length ? `<div class="small" style="margin-top:8px"><b>Stations near ${esc(toN)}</b></div>${rc.stations.map(a => `<div class="row between small" style="padding:3px 0"><span>${ico(a.sub === 'bus station' ? 'bus' : 'train', 'xs')} ${esc(a.name)}${a.code ? ` <span class="tag">${esc(a.code)}</span>` : ''}</span><span class="muted">${fmtKm(a.d)}</span></div>`).join('')}` : ''}
   </div>
   <p class="note">${DISCLAIMER}</p>`;
 }
@@ -644,10 +754,10 @@ function toolbar(cat, withVeg) {
   const F = filt(cat), r = (S.radius[cat] ?? CATEGORIES[cat].radius) / 1000;
   const radii = [...new Set([...RADII, r])].sort((a, b) => a - b);
   return `<div class="toolbar">
-    <input type="search" placeholder="Search ${CATEGORIES[cat].label.toLowerCase()}…" value="${esc(F.q)}" data-f="q" data-cat="${cat}">
+    <input type="search" placeholder="Filter ${CATEGORIES[cat].label.toLowerCase()}…" value="${esc(F.q)}" data-f="q" data-cat="${cat}">
     <select data-f="sort" data-cat="${cat}" title="Sort">${SORTS[cat].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
     <select data-f="radius" data-cat="${cat}" title="Search radius around city centre">${radii.map(v => `<option value="${v}" ${v === r ? 'selected' : ''}>${v} km</option>`).join('')}</select>
-    ${withVeg ? `<label class="chip ${F.veg ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" data-f="veg" data-cat="${cat}" ${F.veg ? 'checked' : ''} hidden>🥦 Veg only</label>` : ''}
+    ${withVeg ? `<label class="chip ${F.veg ? 'on' : ''}" style="cursor:pointer"><input type="checkbox" data-f="veg" data-cat="${cat}" ${F.veg ? 'checked' : ''} hidden>${ico('leaf', 'xs')}Veg only</label>` : ''}
   </div><div id="pchips-${cat}"></div>`;
 }
 
@@ -663,12 +773,12 @@ function viewCat(cat) {
     const gh = `https://www.google.com/travel/search?q=${q('hotels in ' + city)}`;
     intro = `<div class="box"><h4>Book stays in ${esc(city)}</h4>
       <div class="small muted">${n} night${n > 1 ? 's' : ''} · ${T.travelers} guest${T.travelers > 1 ? 's' : ''} – dates are pre-filled on each site.</div>
-      <div class="link-row">${linkBtns([['🏠 Airbnb', air], ['Booking.com', bk], ['Agoda', ag], ['Google Hotels', gh], ...S.region.links.stayExtra], 'btn sm solid')}</div>
-      <p class="small muted" style="margin:8px 0 0">Below: stays listed on OpenStreetMap. Use <b>Apartment</b> / <b>Guest house</b> filters for Airbnb-style options. Prices are estimated <b>all-in per room/night</b> (room tax and platform fee included; hover the price for the split). Tap <b>💲 Prices</b> to compare rates on Google Hotels.</p>
+      <div class="link-row">${linkBtns([['Airbnb', air], ['Booking.com', bk], ['Agoda', ag], ['Google Hotels', gh], ...S.region.links.stayExtra], 'btn sm solid')}</div>
+      <p class="small muted" style="margin:10px 0 0">Below: stays listed on OpenStreetMap. Use <b>Apartment</b> / <b>Guest house</b> filters for Airbnb-style options. Prices are estimated <b>all-in per room/night</b> (room tax and platform fee included; hover the price for the split). Tap <b>Prices</b> to compare rates on Google Hotels.</p>
       <p class="note" style="margin-top:8px">${DISCLAIMER}</p></div>`;
-  } else if (cat === 'food') intro = guideBlock('🍛 What to eat here', ['eat'], 1100);
-  else if (cat === 'shop') intro = guideBlock('🧺 What to buy here', ['buy'], 1100);
-  else if (cat === 'see') intro = guideBlock('🏛️ Highlights', ['see'], 1100);
+  } else if (cat === 'food') intro = guideBlock('What to eat here', ['eat'], 1100);
+  else if (cat === 'shop') intro = guideBlock('What to buy here', ['buy'], 1100);
+  else if (cat === 'see') intro = guideBlock('Highlights', ['see'], 1100);
   return `${intro}${toolbar(cat, cat === 'food')}<div id="plist-${cat}"></div>`;
 }
 
@@ -678,7 +788,7 @@ function refreshList(cat) {
   const F = filt(cat), C = CATEGORIES[cat];
   if (S.loading[cat]) { list.innerHTML = `<div class="box">${spinner(`Finding ${C.label.toLowerCase()} near ${esc(S.trip.to.name)}…`)}</div>`; if (chipsEl) chipsEl.innerHTML = ''; return; }
   if (S.errors[cat] && !S.places[cat]?.length) {
-    list.innerHTML = `<div class="err">${esc(S.errors[cat])}</div><button class="btn sm" data-act="retry" data-cat="${cat}">↻ Retry</button>`;
+    list.innerHTML = `<div class="err">${esc(S.errors[cat])}</div><button class="btn sm" data-act="retry" data-cat="${cat}">${ico('refresh', 'xs')} Retry</button>`;
     if (chipsEl) chipsEl.innerHTML = ''; return;
   }
   const all = S.places[cat] || [];
@@ -690,15 +800,15 @@ function refreshList(cat) {
   }
   const items = visible(cat), lim = S.limit[cat] || 20;
   list.innerHTML = (S.notes[cat] ? `<p class="note">${esc(S.notes[cat])}</p>` : '')
-    + (items.length ? `<div class="small muted" style="margin:2px 0 6px">${items.length} result${items.length > 1 ? 's' : ''} · distance &amp; drive time from <b>${esc(S.base.name)}</b></div>` : '')
+    + (items.length ? `<div class="small muted" style="margin:2px 0 7px">${items.length} result${items.length > 1 ? 's' : ''} · distance &amp; drive time from <b>${esc(S.base.name)}</b></div>` : '')
     + items.slice(0, lim).map(cardHtml).join('')
     + (items.length > lim ? `<button class="btn" data-act="more" data-cat="${cat}">Show ${Math.min(20, items.length - lim)} more</button>` : '')
     + (!items.length ? '<div class="empty">No matches. Try clearing filters or widening the radius.</div>' : '');
 }
 
 function distBlock(p) {
-  const walk = p.dist <= 2.5 ? ` · 🚶 ${fmtMin(p.dist / 4.8 * 60)}` : '';
-  return `<div class="pc-dist"><b>${p.approx ? '≈ ' : ''}${fmtKm(p.dist)}</b>🚗 ${p.approx ? '≈ ' : ''}${fmtMin(p.dur)}${walk}</div>`;
+  const walk = p.dist <= 2.5 ? ` · walk ${fmtMin(p.dist / 4.8 * 60)}` : '';
+  return `<div class="pc-dist"><b>${p.approx ? '≈ ' : ''}${fmtKm(p.dist)}</b>${ico('car', 'xs')} ${p.approx ? '≈ ' : ''}${fmtMin(p.dur)}${walk}</div>`;
 }
 
 function detailTags(p) {
@@ -710,12 +820,12 @@ function detailTags(p) {
     const tip = `Room ${money(sp.base)}${sp.lines.map(l => ` + ${l.label} ${money(l.amt)}`).join('')} = ${money(sp.total)}`;
     out.push(`<span class="tag good" title="${esc(tip)}">≈ ${money(sp.total)}/night incl. taxes</span>`);
   }
-  if (p.notable && p.cat === 'see') out.push('<span class="tag good">★ Notable</span>');
-  if (p.cat === 'food' && ['yes', 'only'].includes(t['diet:vegetarian'])) out.push('<span class="tag good">🥦 Veg-friendly</span>');
+  if (p.notable && p.cat === 'see') out.push(`<span class="tag good">${ico('star', 'xs')}Notable</span>`);
+  if (p.cat === 'food' && ['yes', 'only'].includes(t['diet:vegetarian'])) out.push(`<span class="tag good">${ico('leaf', 'xs')}Veg-friendly</span>`);
   if (t.cuisine && p.cat === 'food') out.push(`<span class="tag">${esc(t.cuisine.split(';').slice(0, 2).map(pretty).join(', '))}</span>`);
-  if (t.opening_hours) out.push(`<span class="tag" title="${esc(t.opening_hours)}">🕒 ${esc(t.opening_hours.length > 30 ? t.opening_hours.slice(0, 28) + '…' : t.opening_hours)}</span>`);
-  if (['wlan', 'yes', 'wifi'].includes(t.internet_access)) out.push('<span class="tag">📶 Wi-Fi</span>');
-  if (t.wheelchair === 'yes') out.push('<span class="tag">♿</span>');
+  if (t.opening_hours) out.push(`<span class="tag" title="${esc(t.opening_hours)}">${ico('clock', 'xs')}${esc(t.opening_hours.length > 30 ? t.opening_hours.slice(0, 28) + '…' : t.opening_hours)}</span>`);
+  if (['wlan', 'yes', 'wifi'].includes(t.internet_access)) out.push('<span class="tag">Wi-Fi</span>');
+  if (t.wheelchair === 'yes') out.push('<span class="tag">Accessible</span>');
   if (t.fee === 'no') out.push('<span class="tag good">Free entry</span>');
   if (t.iata) out.push(`<span class="tag">${esc(t.iata)}</span>`);
   return out.join('');
@@ -729,20 +839,20 @@ function actionsHtml(p, popup) {
   const dir = `https://www.google.com/maps/dir/?api=1&origin=${S.base.lat},${S.base.lon}&destination=${p.lat},${p.lon}&travelmode=driving`;
   const rev = `https://www.google.com/maps/search/?api=1&query=${q(p.name + ' ' + city)}`;
   const px = `https://www.google.com/travel/search?q=${q(p.name + ' ' + city)}`;
-  return `<button class="btn sm solid" data-act="plan-add" data-key="${p.key}">${inPlan ? '✓ In plan' : '➕ Add to plan'}</button>
-    ${popup ? '' : `<button class="btn sm" data-act="focus" data-key="${p.key}">📍 Map</button>`}
-    ${p.cat === 'stay' ? `<button class="btn sm" data-act="set-base" data-key="${p.key}">🏠 Use as base</button><a class="btn sm" target="_blank" rel="noopener" href="${px}">💲 Prices</a>` : ''}
-    <a class="btn sm" target="_blank" rel="noopener" href="${dir}">🧭 Directions</a>
-    ${['food', 'shop', 'see'].includes(p.cat) ? `<a class="btn sm" target="_blank" rel="noopener" href="${rev}">⭐ Reviews</a>` : ''}
-    ${web ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(web)}">🔗 Website</a>` : ''}
-    ${tel ? `<a class="btn sm" href="tel:${esc(tel)}">📞 Call</a>` : ''}`;
+  return `<button class="btn sm solid" data-act="plan-add" data-key="${p.key}">${ico(inPlan ? 'check' : 'plus', 'xs')}${inPlan ? 'In plan' : 'Add to plan'}</button>
+    ${popup ? '' : `<button class="btn sm" data-act="focus" data-key="${p.key}">${ico('pin', 'xs')}Map</button>`}
+    ${p.cat === 'stay' ? `<button class="btn sm" data-act="set-base" data-key="${p.key}">${ico('home', 'xs')}Use as base</button><a class="btn sm" target="_blank" rel="noopener" href="${px}">${ico('wallet', 'xs')}Prices</a>` : ''}
+    <a class="btn sm" target="_blank" rel="noopener" href="${dir}">${ico('nav', 'xs')}Directions</a>
+    ${['food', 'shop', 'see'].includes(p.cat) ? `<a class="btn sm" target="_blank" rel="noopener" href="${rev}">${ico('star', 'xs')}Reviews</a>` : ''}
+    ${web ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(web)}">${ico('link', 'xs')}Website</a>` : ''}
+    ${tel ? `<a class="btn sm" href="tel:${esc(tel)}">${ico('phone', 'xs')}Call</a>` : ''}`;
 }
 
 function cardHtml(p) {
   const C = CATEGORIES[p.cat], t = p.tags;
-  const addr = [t['addr:street'], t['addr:suburb'] || t['addr:city']].filter(Boolean).join(', ');
+  const addr = p.addr || [t['addr:street'], t['addr:suburb'] || t['addr:city']].filter(Boolean).join(', ');
   return `<article class="pcard" data-key="${p.key}">
-    <div class="pc-top"><div class="pc-ico" style="--c:${C.color}22">${C.emoji}</div>
+    <div class="pc-top"><div class="pc-ico" style="--c:${C.color}">${ico(CAT_ICON[p.cat])}</div>
       <div class="pc-main"><h4>${esc(p.name)}</h4><div class="pc-sub">${esc(pretty(p.sub))}${addr ? ' · ' + esc(addr) : ''}</div></div>${distBlock(p)}</div>
     <div class="pc-meta">${detailTags(p)}</div>
     <div class="pc-actions">${actionsHtml(p, false)}</div></article>`;
@@ -750,35 +860,132 @@ function cardHtml(p) {
 
 function popupHtml(p) {
   return `<div class="pp"><h4>${esc(p.name)}</h4>
-    <div class="small muted">${esc(pretty(p.sub))} · ${p.approx ? '≈ ' : ''}${fmtKm(p.dist)} · 🚗 ${p.approx ? '≈ ' : ''}${fmtMin(p.dur)}</div>
+    <div class="small muted">${esc(pretty(p.sub))} · ${p.approx ? '≈ ' : ''}${fmtKm(p.dist)} · ${p.approx ? '≈ ' : ''}${fmtMin(p.dur)} by car</div>
     <div class="pc-meta">${detailTags(p)}</div><div class="pc-actions">${actionsHtml(p, true)}</div></div>`;
+}
+
+/* ---------- live search ---------- */
+const QUICK = ['Cafe', 'Street food', 'Pharmacy', 'ATM', 'Hospital', 'Petrol pump', 'Temple', 'Museum', 'Market', 'Park'];
+
+function guessCat(x) {
+  const c = x.category, t = x.type;
+  if (c === 'tourism' && ['hotel', 'guest_house', 'hostel', 'motel', 'apartment', 'resort', 'chalet'].includes(t)) return 'stay';
+  if (c === 'amenity' && ['restaurant', 'cafe', 'fast_food', 'food_court', 'ice_cream', 'bar', 'pub'].includes(t)) return 'food';
+  if (c === 'shop' || (c === 'amenity' && t === 'marketplace')) return 'shop';
+  if (c === 'railway' || c === 'aeroway' || t === 'bus_station') return 'transit';
+  if (c === 'amenity' && t === 'car_rental') return 'rent';
+  return 'see';
+}
+
+function searchRow(x) {
+  const cat = guessCat(x);
+  const tags = { ...(x.extratags || {}), name: x.name || x.display_name.split(',')[0] };
+  tags[x.category] = x.type;
+  const p = normalize(cat, { type: x.osm_type, id: x.osm_id, lat: +x.lat, lon: +x.lon, tags });
+  if (!p) return null;
+  p.key = `srch:${x.osm_type[0]}${x.osm_id}`;
+  p.sub = x.type;
+  p.addr = x.display_name.split(',').slice(1, 4).join(',').trim();
+  return p;
+}
+
+const snip = h => esc(new DOMParser().parseFromString(String(h).replace(/<span class="searchmatch">/g, '[[').replace(/<\/span>/g, ']]'), 'text/html').body.textContent)
+  .replace(/\[\[/g, '<span class="searchmatch">').replace(/\]\]/g, '</span>');
+
+async function runSearch(term) {
+  const X = S.search, seq = ++X.seq;
+  if (!S.trip) { renderContent(); return; }
+  X.loading = true; X.done = false; renderContent();
+  const to = S.trip.to, city = to.city || to.name;
+  const safe = f => { try { return Promise.resolve(f()); } catch (e) { return Promise.reject(e); } };
+  const [pl, voy, wp] = await Promise.allSettled([
+    safe(() => API.searchPlaces(term, to.lat, to.lon, 40)),
+    safe(() => API.wikiSearch('wikivoyage', `${term} ${city}`, 5)),
+    safe(() => API.wikiSearch('wikipedia', `${term} ${city}`, 4)),
+  ]);
+  if (seq !== X.seq) return;
+  const seen = new Set();
+  // keep results near the destination only (the widened search can return matches from across the world)
+  X.places = pl.status === 'fulfilled'
+    ? pl.value.rows.map(searchRow).filter(p => p && hav(to, p) <= 120 && !seen.has(p.key) && seen.add(p.key)).sort((a, b) => a.air - b.air) : [];
+  X.wide = pl.status === 'fulfilled' && pl.value.wide && X.places.some(p => hav(to, p) > 40);
+  X.errP = pl.status === 'rejected';
+  X.voy = voy.status === 'fulfilled' ? voy.value : [];
+  X.wp = wp.status === 'fulfilled' ? wp.value : [];
+  S.places.srch = X.places;
+  X.loading = false; X.done = true;
+  if (S.tab === 'search') {
+    renderContent(); refreshMarkers();
+    if (X.places.length) {
+      const pts = X.places.slice(0, 30).map(p => [p.lat, p.lon]).concat([[S.base.lat, S.base.lon]]);
+      map.fitBounds(L.latLngBounds(pts), { paddingTopLeft: [40, 60], paddingBottomRight: [40, 40], maxZoom: 15 });
+    }
+    enrichList(X.places, () => { if (S.tab === 'search' && seq === X.seq) { renderContent(); } });
+  }
+}
+
+function viewSearch() {
+  if (!S.trip) return needTrip();
+  const X = S.search, city = S.trip.to.city || S.trip.to.name;
+  const quick = `<div class="chips">${QUICK.map(t => `<button class="chip" data-act="qsearch" data-q="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
+  if (!X.q) {
+    return `<div class="hero"><h2>Search ${esc(city)} live</h2><p>Type in the box above. Results come straight from OpenStreetMap, Wikivoyage and Wikipedia as you type, and you can open the same search on Google, Bing and more.</p></div>
+      ${sec('search', 'Quick searches')}${quick}
+      <p class="note">Free live sources only. A full web search engine can't be queried from a browser without a paid key, so the buttons open one in a new tab.</p>`;
+  }
+  const webq = `${X.q} ${city}`;
+  const web = [['Google', `https://www.google.com/search?q=${q(webq)}`], ['Bing', `https://www.bing.com/search?q=${q(webq)}`], ['DuckDuckGo', `https://duckduckgo.com/?q=${q(webq)}`],
+    ['Google Maps', `https://www.google.com/maps/search/?api=1&query=${q(webq)}`], ['Tripadvisor', `https://www.tripadvisor.com/Search?q=${q(webq)}`], ['Reddit', `https://www.reddit.com/search/?q=${q(webq)}`]];
+  const res = (list, src) => list.map(r => `<a class="res" href="${esc(r.url)}" target="_blank" rel="noopener"><b>${esc(r.title)}</b><p>${snip(r.snippet)}…</p><span>${src} ${ico('link', 'xs')}</span></a>`).join('');
+  let h = `<div class="row between" style="margin-bottom:4px"><div class="small muted"><span class="live-dot"></span>Live results for <b>${esc(X.q)}</b> near ${esc(city)}</div></div>${quick}`;
+  if (X.loading) return h + `<div class="box">${spinner('Searching OpenStreetMap, Wikivoyage and Wikipedia…')}</div>`;
+  h += sec('pin', 'On the map', `<em>${X.places.length}</em>`);
+  h += X.errP ? '<div class="err">Place search is unavailable right now. Please try again in a moment.</div>' : '';
+  h += X.places.length ? (X.wide ? '<p class="note" style="margin-bottom:8px">Few matches in the city itself, so results from the wider area (up to 120 km) are included.</p>' : '') + X.places.slice(0, 12).map(cardHtml).join('')
+    : (X.errP ? '' : '<div class="box muted">No places matched. Try a simpler word like "cafe" or a place name.</div>');
+  if (X.voy.length) h += sec('globe', 'Travel guides', `<em>${X.voy.length}</em>`) + res(X.voy, 'Wikivoyage');
+  if (X.wp.length) h += sec('info', 'Background', `<em>${X.wp.length}</em>`) + res(X.wp, 'Wikipedia');
+  h += sec('search', 'Search the web') + `<div class="link-row" style="margin-top:0">${linkBtns(web)}</div>`;
+  return h;
+}
+
+let gTimer;
+function onGSearch(v, immediate) {
+  v = v.trim();
+  $('#gclear').hidden = !v;
+  S.search.q = v;
+  clearTimeout(gTimer);
+  if (!v) { S.search.seq++; if (S.tab === 'search') setTab(S.search.prev || 'overview'); return; }
+  if (S.tab !== 'search') { S.search.prev = S.tab; setTab('search'); }
+  if (!S.trip) { toast('Plan a trip first so I know where to search'); return; }
+  gTimer = setTimeout(() => runSearch(v), immediate ? 0 : 450);
 }
 
 /* ---------- get around ---------- */
 function viewMove() {
   if (!S.trip) return needTrip();
   const R = S.region, d = nights() + 1;
-  const fares = [['🚕', 'Cab / taxi', R.ride.cab], ['🛺', 'Auto / tuk-tuk', R.ride.auto], ['🏍️', 'Bike taxi', R.ride.bike]];
+  const fares = [['Cab / taxi', R.ride.cab], ['Auto / tuk-tuk', R.ride.auto], ['Bike taxi', R.ride.bike]];
   return `
-  <h3>🚕 Ride-hailing – typical fares</h3>
+  ${sec('car', 'Ride-hailing – typical fares')}
   <div class="box">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <tr class="muted small"><td></td><td>3 km</td><td>8 km</td><td>20 km</td></tr>
-      ${fares.map(([i, n, [b, k]]) => `<tr style="border-top:1px solid var(--line)"><td style="padding:6px 0">${i} ${n}</td>${[3, 8, 20].map(km => `<td><b>${money(priceOf('ride', b + k * km).total)}</b></td>`).join('')}</tr>`).join('')}
+      ${fares.map(([n, [b, k]]) => `<tr style="border-top:1px solid var(--line)"><td style="padding:7px 0">${n}</td>${[3, 8, 20].map(km => `<td><b>${money(priceOf('ride', b + k * km).total)}</b></td>`).join('')}</tr>`).join('')}
     </table>
     <div class="link-row">${linkBtns(R.links.ride)}</div>
-    <p class="small muted" style="margin:8px 0 0">Includes ${esc(R.tax.ride.map(r => r.label).join(', '))}. Excludes surge pricing and tolls; apps available vary by city.</p>
+    <p class="small muted" style="margin:10px 0 0">Includes ${esc(R.tax.ride.map(r => r.label).join(', '))}. Excludes surge pricing and tolls; apps available vary by city.</p>
   </div>
-  <h3>🚗 Rent a vehicle – daily rates</h3>
+  ${sec('key', 'Rent a vehicle – daily rates')}
   <div class="box">
-    ${R.rentDay.map(([i, n, [lo, hi]]) => { const a = priceOf('rentday', lo).total, b = priceOf('rentday', hi).total; return `<div style="padding:5px 0;border-bottom:1px solid var(--line)"><div class="row between"><span>${i} ${n}</span><b>${range(a, b)}/day</b></div><div class="small muted" style="text-align:right">${d} days ≈ ${range(a * d, b * d)}</div></div>`; }).join('')}
-    <p class="small muted" style="margin:6px 0 0">Includes ${esc(R.tax.rentday.map(r => r.label).join(', '))}. Fuel, tolls and a refundable deposit are extra.</p>
+    ${R.rentDay.map(([, n, [lo, hi]]) => { const a = priceOf('rentday', lo).total, b = priceOf('rentday', hi).total; return `<div style="padding:6px 0;border-bottom:1px solid var(--line)"><div class="row between"><span>${n}</span><b>${range(a, b)}/day</b></div><div class="small muted" style="text-align:right">${d} days ≈ ${range(a * d, b * d)}</div></div>`; }).join('')}
+    <p class="small muted" style="margin:8px 0 0">Includes ${esc(R.tax.rentday.map(r => r.label).join(', '))}. Fuel, tolls and a refundable deposit are extra.</p>
     <div class="link-row">${linkBtns(R.links.rent, 'btn sm solid')}</div>
     <p class="small muted" style="margin:8px 0 0">You usually need a valid driving licence (and an IDP abroad), ID and a deposit.</p>
   </div>
-  <h3>🔎 Rental shops &amp; garages found nearby</h3>
+  ${sec('key', 'Rental shops &amp; garages nearby')}
   ${toolbar('rent', false)}<div id="plist-rent"></div>
-  <h3>🚉 Airports, stations &amp; metro</h3>
+  ${sec('train', 'Airports, stations &amp; metro')}
   ${toolbar('transit', false)}<div id="plist-transit"></div>`;
 }
 
@@ -786,33 +993,33 @@ function viewMove() {
 function viewPlan() {
   if (!S.trip) return needTrip();
   const P = S.plan;
-  let html = `<div class="row between" style="margin-bottom:8px"><div class="small muted">Add spots from any tab with <b>➕ Add to plan</b>. New stops go to the highlighted day.</div></div>
+  let html = `<div class="small muted" style="margin-bottom:6px">Add spots from any tab with <b>Add to plan</b>. New stops go to the highlighted day.</div>
     <div class="chips">${Array.from({ length: P.days }, (_, i) => i + 1).map(d => `<button class="chip ${P.active === d ? 'on' : ''}" data-act="plan-day" data-day="${d}">Day ${d}</button>`).join('')}
-    <button class="chip" data-act="plan-addday">＋</button>${P.days > 1 ? '<button class="chip" data-act="plan-rmday">－</button>' : ''}</div>`;
+    <button class="chip" data-act="plan-addday" title="Add a day">${ico('plus', 'xs')}</button>${P.days > 1 ? `<button class="chip" data-act="plan-rmday" title="Remove last day">${ico('x', 'xs')}</button>` : ''}</div>`;
   for (let d = 1; d <= P.days; d++) {
     const items = P.items.filter(i => i.day === d), color = DAY_COLORS[(d - 1) % DAY_COLORS.length], r = S.routes[d];
     const total = r && !r.pending ? `${fmtKm(r.dist)} · ${fmtMin(r.dur)} driving` : items.length ? 'calculating…' : '';
     html += `<div class="day"><div class="day-h"><div><span class="dot" style="background:${color}"></span><b>Day ${d}</b> <span class="muted small">${esc(dayLabel(d))}</span><div class="small muted">${total}</div></div>
-      <div class="row">${items.length > 1 ? `<button class="btn sm" data-act="plan-opt" data-day="${d}">✨ Optimise</button>` : ''}${items.length ? `<a class="btn sm" target="_blank" rel="noopener" href="${gmapsRoute(items)}">🧭 Google Maps</a>` : ''}</div></div>`;
+      <div class="row">${items.length > 1 ? `<button class="btn sm" data-act="plan-opt" data-day="${d}">${ico('wand', 'xs')}Optimise</button>` : ''}${items.length ? `<a class="btn sm" target="_blank" rel="noopener" href="${gmapsRoute(items)}">${ico('nav', 'xs')}Google Maps</a>` : ''}</div></div>`;
     if (!items.length) html += `<div class="stop muted">${P.active === d ? 'Nothing yet – add spots from the other tabs.' : 'Empty'}</div>`;
     else {
-      html += `<div class="small muted">🏠 Start: ${esc(S.base.name)}</div>`;
+      html += `<div class="small muted">${ico('home', 'xs')} Start: ${esc(S.base.name)}</div>`;
       items.forEach((it, i) => {
         const leg = r?.legs?.[i];
-        html += `<div class="leg">${leg ? `🚗 ${fmtKm(leg.dist)} · ${fmtMin(leg.dur)}${r.fail ? ' (est.)' : ''}` : '…'}</div>
+        html += `<div class="leg">${leg ? `${ico('car', 'xs')} ${fmtKm(leg.dist)} · ${fmtMin(leg.dur)}${r.fail ? ' (est.)' : ''}` : '…'}</div>
           <div class="stop" data-key="${it.key}"><div class="n" style="background:${color}">${i + 1}</div>
           <div class="t"><b>${esc(it.place.name)}</b><div class="small muted">${esc(pretty(it.place.sub))}</div></div>
-          <button class="ib" title="Show on map" data-act="focus" data-key="${it.key}">📍</button>
-          <button class="ib" title="Move up" data-act="plan-up" data-key="${it.key}" ${i === 0 ? 'disabled' : ''}>↑</button>
-          <button class="ib" title="Move down" data-act="plan-down" data-key="${it.key}" ${i === items.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="ib" title="Remove" data-act="plan-remove" data-key="${it.key}">✕</button></div>`;
+          <button class="ib" title="Show on map" data-act="focus" data-key="${it.key}">${ico('pin', 'xs')}</button>
+          <button class="ib" title="Move up" data-act="plan-up" data-key="${it.key}" ${i === 0 ? 'disabled' : ''}>${ico('up', 'xs')}</button>
+          <button class="ib" title="Move down" data-act="plan-down" data-key="${it.key}" ${i === items.length - 1 ? 'disabled' : ''}>${ico('down', 'xs')}</button>
+          <button class="ib" title="Remove" data-act="plan-remove" data-key="${it.key}">${ico('x', 'xs')}</button></div>`;
       });
       const back = r?.legs?.[items.length];
-      html += `<div class="leg">${back ? `🚗 ${fmtKm(back.dist)} · ${fmtMin(back.dur)}` : '…'}</div><div class="small muted">🏠 Back to ${esc(S.base.name)}</div>`;
+      html += `<div class="leg">${back ? `${ico('car', 'xs')} ${fmtKm(back.dist)} · ${fmtMin(back.dur)}` : '…'}</div><div class="small muted">${ico('home', 'xs')} Back to ${esc(S.base.name)}</div>`;
     }
     html += '</div>';
   }
-  html += `<div class="row no-print"><button class="btn solid" data-act="plan-copy">📋 Copy itinerary</button><button class="btn" data-act="plan-print">🖨️ Print</button>${P.items.length ? '<button class="btn" data-act="plan-clear">🗑️ Clear all</button>' : ''}</div>`;
+  html += `<div class="row no-print"><button class="btn solid" data-act="plan-copy">${ico('copy', 'xs')}Copy itinerary</button><button class="btn" data-act="plan-print">${ico('printer', 'xs')}Print</button>${P.items.length ? `<button class="btn" data-act="plan-clear">${ico('trash', 'xs')}Clear all</button>` : ''}</div>`;
   return html;
 }
 
@@ -837,7 +1044,7 @@ async function ensureRoute(day) {
   drawPlan();
   if (S.tab === 'plan') renderContent();
 }
-function replan(day) {
+function replan() {
   drawPlan(); save();
   for (let d = 1; d <= S.plan.days; d++) ensureRoute(d);
   if (S.tab === 'plan') renderContent();
@@ -847,7 +1054,7 @@ const renderListsIfVisible = () => (TAB_CATS[S.tab] || []).forEach(refreshList);
 
 function planText() {
   const T = S.trip, P = S.plan;
-  let t = `TPVM trip:${T.from.name} → ${T.to.name} (${T.start} to ${T.end}, ${T.travelers} traveller${T.travelers > 1 ? 's' : ''})\nBase: ${S.base.name}\n`;
+  let t = `TPVM trip: ${T.from.name} → ${T.to.name} (${T.start} to ${T.end}, ${T.travelers} traveller${T.travelers > 1 ? 's' : ''})\nBase: ${S.base.name}\n`;
   for (let d = 1; d <= P.days; d++) {
     const items = P.items.filter(i => i.day === d), r = S.routes[d];
     t += `\nDay ${d} – ${dayLabel(d)}\n`;
@@ -860,19 +1067,21 @@ function planText() {
 /* ============================== persistence ============================== */
 function save() {
   try {
-    localStorage.setItem('tpvm.v1',JSON.stringify({ trip: S.trip, base: S.base, plan: S.plan, tab: S.tab }));
+    localStorage.setItem('tpvm.v1', JSON.stringify({ trip: S.trip, base: S.base, plan: S.plan, tab: S.tab === 'search' ? S.search.prev : S.tab }));
   } catch { /* storage unavailable */ }
 }
 
 /* ============================== events ============================== */
 const ACT = {
   tab: el => setTab(el.dataset.tab),
-  sample: async el => {
+  sample: el => {
     const [a, b] = SAMPLE_TRIPS[+el.dataset.i];
     $('#fromInput').value = a; $('#toInput').value = b;
     $('#fromInput')._place = $('#toInput')._place = null;
     startTrip();
   },
+  mode: el => { S.mode = el.dataset.id; jSig = ''; renderContent(); refreshMarkers(); fitJourney(); },
+  qsearch: el => { $('#gsearch').value = el.dataset.q; onGSearch(el.dataset.q, true); },
   focus: el => focusPlace(el.dataset.key),
   layer: el => {
     const cat = el.dataset.cat;
@@ -890,7 +1099,7 @@ const ACT = {
     S.plan.items.push({ key: p.key, day: S.plan.active, place: { key: p.key, cat: p.cat, name: p.name, lat: p.lat, lon: p.lon, sub: p.sub, tags: { website: p.tags.website, phone: p.tags.phone }, dist: p.dist, dur: p.dur, approx: p.approx } });
     toast(`Added to Day ${S.plan.active}`);
     map.closePopup(); replan();
-    renderListsIfVisible();
+    if (S.tab === 'search') renderContent();
   },
   'plan-remove': el => { S.plan.items = S.plan.items.filter(i => i.key !== el.dataset.key); replan(); },
   'plan-up': el => movePlan(el.dataset.key, -1),
@@ -930,7 +1139,11 @@ function movePlan(key, dir) {
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
-  if (el && ACT[el.dataset.act]) { e.preventDefault(); ACT[el.dataset.act](el); }
+  if (!el || !ACT[el.dataset.act]) return;
+  // A link/button nested inside an actionable card keeps its own behaviour.
+  const inner = e.target.closest('a, button, summary, input, select, label');
+  if (inner && inner !== el && el.contains(inner)) return;
+  e.preventDefault(); ACT[el.dataset.act](el);
 });
 
 let searchTimer;
@@ -1017,11 +1230,14 @@ function init() {
   setupAC('#fromInput', '#fromSugg'); setupAC('#toInput', '#toSugg');
   $('#tripForm').addEventListener('submit', ev => { ev.preventDefault(); startTrip(); });
   ['#startDate', '#endDate', '#travelers', '#tier'].forEach(id => $(id).addEventListener('change', syncForm));
+  $('#gsearch').addEventListener('input', ev => onGSearch(ev.target.value));
+  $('#gsearch').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); onGSearch(ev.target.value, true); } });
+  $('#gclear').addEventListener('click', () => { $('#gsearch').value = ''; onGSearch(''); $('#gsearch').focus(); });
 
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('tpvm.v1') || localStorage.getItem('wayfarer.v1') || 'null'); } catch { /* ignore */ }
   if (saved?.trip?.to && saved.trip.from) {
-    S.trip = saved.trip; S.plan = saved.plan || S.plan; S.base = saved.base; S.tab = saved.tab || 'overview';
+    S.trip = saved.trip; S.plan = saved.plan || S.plan; S.base = saved.base; S.tab = saved.tab && saved.tab !== 'search' ? saved.tab : 'overview';
     $('#fromInput').value = S.trip.from.label; $('#toInput').value = S.trip.to.label;
     $('#fromInput')._place = S.trip.from; $('#toInput')._place = S.trip.to;
     if (S.trip.start) $('#startDate').value = S.trip.start;

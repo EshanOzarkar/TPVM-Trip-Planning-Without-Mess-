@@ -18,8 +18,9 @@ Then open http://localhost:5174.
 
 | Tab | Content |
 | --- | --- |
-| Overview | Route summary, weather, rough budget, Wikivoyage destination guide |
-| Get there | Flight / train / bus / cab / self-drive compared (time + estimated all-in fare), nearest airports & stations, links to booking sites |
+| Overview | The journey drawn on the map (real road route, flight arc, distance and time), weather, rough budget, Wikivoyage destination guide |
+| Search | Live search as you type: places near your destination (OpenStreetMap), travel guides (Wikivoyage), background (Wikipedia), plus one-click web search on Google, Bing, DuckDuckGo, Google Maps, Tripadvisor and Reddit |
+| Get there | Flight / train / bus / cab / self-drive compared (time + estimated all-in fare), nearest airports & stations, links to booking sites. Click an option to see its journey on the map |
 | Stay | Hotels, hostels, guest houses, apartments with an estimated price per night, plus Airbnb / Booking.com / Agoda / Google Hotels links with dates pre-filled |
 | Get around | Ride-hailing fare table, rental daily rates, rental shops, stations & metro |
 | Eat / Shop / Explore | Places on the map with road distance + drive/walk time from your base, filters, search, sort |

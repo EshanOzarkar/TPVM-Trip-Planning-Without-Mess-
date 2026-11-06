@@ -131,6 +131,41 @@ const API = (() => {
   const stations = (lat, lon, r) => overpass(
     `[out:json][timeout:30];(nwr["railway"="station"]["station"!~"^(subway|light_rail)$"]["name"](around:${r},${lat},${lon});nwr["amenity"="bus_station"]["name"](around:${r},${lat},${lon}););out center tags qt 60;`);
 
+  /* ---------- Live search ---------- */
+  /** Nominatim free-text search biased to a box around (lat, lon); widens if few local hits. */
+  async function searchPlaces(term, lat, lon, km = 40) {
+    const key = `s:${term.toLowerCase()}:${lat.toFixed(2)},${lon.toFixed(2)}`;
+    if (cache.has(key)) return cache.get(key);
+    const dLat = km / 111, dLon = km / (111 * Math.cos(lat * Math.PI / 180));
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&extratags=1&addressdetails=1&limit=15&accept-language=en&viewbox=${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}&q=${encodeURIComponent(term)}`;
+    await nomGate();
+    let rows = await fetchJSON(url + '&bounded=1');
+    let wide = false;
+    if (rows.length < 3) {
+      await nomGate();
+      const more = await fetchJSON(url + '&bounded=0');
+      const seen = new Set(rows.map(r => r.osm_type + r.osm_id));
+      rows = rows.concat(more.filter(r => !seen.has(r.osm_type + r.osm_id)));
+      wide = true;
+    }
+    const out = { rows, wide };
+    cache.set(key, out);
+    return out;
+  }
+
+  /** Full-text search on a Wikimedia site ('wikivoyage' | 'wikipedia'). */
+  async function wikiSearch(site, term, limit = 5) {
+    const key = `ws:${site}:${term.toLowerCase()}`;
+    if (cache.has(key)) return cache.get(key);
+    const j = await fetchJSON(`https://en.${site}.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&srlimit=${limit}&format=json&origin=*`);
+    const out = (j.query?.search || []).map(r => ({
+      title: r.title, snippet: r.snippet,
+      url: `https://en.${site}.org/wiki/${encodeURIComponent(r.title.replace(/ /g, '_'))}`,
+    }));
+    cache.set(key, out);
+    return out;
+  }
+
   /* ---------- OSRM ---------- */
   const OSRM = 'https://router.project-osrm.org';
   const ll = p => `${(+p.lon).toFixed(5)},${(+p.lat).toFixed(5)}`;
@@ -190,5 +225,5 @@ const API = (() => {
     }));
   }
 
-  return { geocode, places, nominatimPlaces, airports, stations, osrmTable, osrmRoute, guide, weather };
+  return { geocode, places, nominatimPlaces, searchPlaces, wikiSearch, airports, stations, osrmTable, osrmRoute, guide, weather };
 })();

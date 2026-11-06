@@ -2,7 +2,7 @@
 
 const CATEGORIES = {
   see: {
-    label: 'Explore', emoji: '📍', color: '#0284c7', radius: 12000,
+    label: 'Explore', color: '#0284c7', radius: 12000,
     groups: [
       { limit: 150, f: [
         '["tourism"~"^(attraction|museum|viewpoint|gallery|theme_park|zoo|aquarium)$"]["name"]',
@@ -13,18 +13,18 @@ const CATEGORIES = {
     ],
   },
   stay: {
-    label: 'Stays', emoji: '🏨', color: '#7c3aed', radius: 6000,
+    label: 'Stays', color: '#7c3aed', radius: 6000,
     groups: [{ limit: 250, f: ['["tourism"~"^(hotel|guest_house|hostel|apartment|motel|resort|chalet)$"]["name"]'] }],
   },
   food: {
-    label: 'Food', emoji: '🍽️', color: '#ea580c', radius: 3000,
+    label: 'Food', color: '#ea580c', radius: 3000,
     groups: [
       { limit: 220, f: ['["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream)$"]["name"]'] },
       { limit: 50, f: ['["shop"~"^(bakery|confectionery|pastry)$"]["name"]'] },
     ],
   },
   shop: {
-    label: 'Shopping', emoji: '🛍️', color: '#db2777', radius: 7000,
+    label: 'Shopping', color: '#db2777', radius: 7000,
     groups: [
       { limit: 120, f: [
         '["shop"~"^(mall|department_store|souvenir|handicraft|craft|gift)$"]["name"]',
@@ -33,13 +33,13 @@ const CATEGORIES = {
     ],
   },
   rent: {
-    label: 'Rentals', emoji: '🚗', color: '#059669', radius: 15000,
+    label: 'Rentals', color: '#059669', radius: 15000,
     groups: [{ limit: 80, f: [
       '["amenity"~"^(car_rental|motorcycle_rental|bicycle_rental|boat_rental)$"]["name"]',
       '["shop"="rental"]["name"]'] }],
   },
   transit: {
-    label: 'Stations', emoji: '🚉', color: '#475569', radius: 25000,
+    label: 'Stations', color: '#475569', radius: 25000,
     groups: [
       { limit: 10, f: ['["aeroway"="aerodrome"]["iata"]["name"]'] },
       { limit: 40, f: ['["railway"="station"]["station"!~"^(subway|light_rail)$"]["name"]'] },
